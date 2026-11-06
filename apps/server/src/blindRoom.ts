@@ -5,6 +5,7 @@ import {
   hostAcceptsEpoch,
   mayWrite,
   type RoleState,
+  type SealedFrame,
 } from "@suite/sync";
 
 /**
@@ -18,7 +19,7 @@ import {
  * Everything else is the clients' business. This module exists so those four refusals
  * are testable without a socket, and so the socket layer has nothing to decide.
  */
-export type HostRejection = FrameRejection | "not-authorized" | "invalid-signature";
+export type HostRejection = FrameRejection;
 
 export type HostVerdict =
   | { readonly ok: true; readonly frame: Frame }
@@ -41,22 +42,24 @@ export interface HostWorkspace {
  * is only stored when all four agree.
  */
 export function admitFrame(
-  frame: Frame,
+  sealed: SealedFrame,
   host: HostWorkspace,
   roles: RoleState,
   verify: FrameVerifier,
+  receivedAt: string = new Date().toISOString(),
 ): HostVerdict {
-  if (frame.workspaceId !== host.workspaceId) return { ok: false, reason: "wrong-workspace" };
+  if (sealed.workspaceId !== host.workspaceId) return { ok: false, reason: "wrong-workspace" };
 
-  if (!hostAcceptsEpoch(frame.epoch, host.newestEpoch)) return { ok: false, reason: "stale-epoch" };
+  if (!hostAcceptsEpoch(sealed.epoch, host.newestEpoch))
+    return { ok: false, reason: "stale-epoch" };
 
-  if (!mayWrite(roles, frame.deviceId)) return { ok: false, reason: "not-authorized" };
+  if (!mayWrite(roles, sealed.deviceId)) return { ok: false, reason: "not-authorized" };
 
-  if (!verify(framePayload(frame), frame.signature, frame.deviceId)) {
+  if (!verify(framePayload(sealed), sealed.signature, sealed.deviceId)) {
     return { ok: false, reason: "invalid-signature" };
   }
 
-  return { ok: true, frame };
+  return { ok: true, frame: { ...sealed, receivedAt } };
 }
 
 /**
@@ -97,6 +100,21 @@ export class FrameLog {
   /** Frames after the first `count`, which is how a returning device catches up. */
   since(count: number): readonly Frame[] {
     return this.frames.slice(Math.max(0, count));
+  }
+
+  /**
+   * Forget frames that arrived before a cutoff.
+   *
+   * This is the retention window. A device away longer than this cannot replay its way
+   * back in — it needs a snapshot from a peer, because the host cannot hand out a document
+   * it was never able to read.
+   */
+  dropOlderThan(cutoff: string): number {
+    const kept = this.frames.filter((frame) => frame.receivedAt >= cutoff);
+    const dropped = this.frames.length - kept.length;
+    this.frames.length = 0;
+    this.frames.push(...kept);
+    return dropped;
   }
 
   /** Forget everything older than `epoch`. The host may not keep what it cannot read. */

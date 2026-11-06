@@ -1,20 +1,14 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
-import { type MemberRole, SYNC_PROTOCOL_VERSION } from "@suite/sync";
-import { createSyncServer, RoomRegistry } from "./server.js";
-import { WorkspaceDirectoryStore } from "./store.js";
-import { loadWorkspace } from "./workspace.js";
-import {
-  addWorkspaceMember,
-  formatWorkspaceSummary,
-  initWorkspace,
-  showWorkspace,
-} from "./workspaceCli.js";
+import { RELAY_PROTOCOL_VERSION } from "@suite/sync";
+import { createSyncServer, HostRegistry } from "./server.js";
+import { FileFrameStore } from "./store.js";
 
 export const SERVER_NAME = "suite-sync";
 export const SERVER_VERSION = "0.1.0";
 export const DEFAULT_HOST = "127.0.0.1";
 export const DEFAULT_PORT = 8787;
+export const DEFAULT_STORE = ".suite-sync";
 
 export interface CliResult {
   readonly code: number;
@@ -25,253 +19,134 @@ export interface CliResult {
 export interface ServeOptions {
   readonly host: string;
   readonly port: number;
-  readonly workspaces: readonly string[];
+  readonly store: string;
+  /**
+   * Accept any signature.
+   *
+   * A host checks device signatures, so it needs a device key to check against — and
+   * there is no key registry yet. Without this flag the server refuses to start rather
+   * than run a mailbox that admits anything; with it, everything is admitted and the
+   * only thing standing between a stranger and the store is the network being loopback.
+   */
+  readonly trustAll: boolean;
 }
 
 export type ServeOptionsParse =
   | { readonly ok: true; readonly value: ServeOptions }
   | { readonly ok: false; readonly error: string };
 
-const USAGE = `suite-sync ${SERVER_VERSION} (protocol ${SYNC_PROTOCOL_VERSION})
+const USAGE = `suite-sync ${SERVER_VERSION} (relay protocol ${RELAY_PROTOCOL_VERSION})
 
 Usage:
-  suite-sync --version                              print the server and protocol versions
-  suite-sync status                                 report whether a workspace is configured
-  suite-sync serve [--host <host>] [--port <port>] [--workspace <dir>]...
+  suite-sync --version                   print the server and protocol versions
+  suite-sync status                      report how a serve would be configured
+  suite-sync serve [--host <host>] [--port <port>] [--store <dir>] [--trust-all]
 
-  suite-sync workspace init <dir> [--from-canvas <file>] [--workspace <id>]
-      [--owner <id>] [--editor <id>] [--force]
-  suite-sync workspace show <dir>
-  suite-sync workspace add-member <dir> --member <id> --role editor|viewer [--name <name>]
-
-A workspace directory holds \`membership.json\` and an optional \`snapshot.loro\`.
-The server starts with no workspaces when none are named.
+The store holds one append-only file of encrypted frames per workspace. The host
+cannot read a frame, merge two, or answer a question about a document.
 `;
 
-/**
- * Parse and run one command.
- *
- * Pure on purpose: the test drives the same function the binary does, so a
- * command added without a test is visible rather than discovered by a user.
- */
-export function runCli(argv: readonly string[]): CliResult {
-  const [command] = argv;
-
-  switch (command) {
-    case undefined:
-    case "help":
-    case "--help":
-    case "-h":
-      return { code: 0, stdout: USAGE, stderr: "" };
-    case "--version":
-    case "-v":
-      return {
-        code: 0,
-        stdout: `${SERVER_NAME} ${SERVER_VERSION} (protocol ${SYNC_PROTOCOL_VERSION})\n`,
-        stderr: "",
-      };
-    case "status":
-      return {
-        code: 0,
-        stdout: `${SERVER_NAME}: no workspace configured\n`,
-        stderr: "",
-      };
-    case "serve":
-    case "workspace":
-      return {
-        code: 1,
-        stdout: "",
-        stderr: `${command} must be run by the suite-sync binary\n`,
-      };
-    default:
-      return {
-        code: 1,
-        stdout: "",
-        stderr: `unknown command: ${command}\n`,
-      };
-  }
-}
-
 export function parseServeOptions(argv: readonly string[]): ServeOptionsParse {
-  let host = DEFAULT_HOST;
-  let port = DEFAULT_PORT;
-  const workspaces: string[] = [];
+  const options: { host: string; port: number; store: string; trustAll: boolean } = {
+    host: DEFAULT_HOST,
+    port: DEFAULT_PORT,
+    store: DEFAULT_STORE,
+    trustAll: false,
+  };
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
-    if (argument === undefined) continue;
-
-    if (argument === "--workspace") {
-      const value = argv[index + 1]?.trim();
-      if (value === undefined || value.length === 0) {
-        return { ok: false, error: "--workspace needs a directory" };
+    switch (argument) {
+      case "--host":
+        options.host = argv[index + 1] ?? "";
+        index += 1;
+        break;
+      case "--port": {
+        const raw = argv[index + 1] ?? "";
+        const port = Number.parseInt(raw, 10);
+        if (!Number.isInteger(port) || port < 0 || port > 65535) {
+          return { ok: false, error: `not a port: ${raw}` };
+        }
+        options.port = port;
+        index += 1;
+        break;
       }
-      workspaces.push(value);
-      index += 1;
-      continue;
+      case "--store":
+        options.store = argv[index + 1] ?? "";
+        index += 1;
+        break;
+      case "--trust-all":
+        options.trustAll = true;
+        break;
+      default:
+        return { ok: false, error: `unknown argument: ${argument ?? ""}` };
     }
-
-    if (argument === "--host") {
-      const value = argv[index + 1]?.trim();
-      if (value === undefined || value.length === 0) {
-        return { ok: false, error: "--host needs a value" };
-      }
-      host = value;
-      index += 1;
-      continue;
-    }
-
-    if (argument === "--port") {
-      const value = argv[index + 1];
-      if (value === undefined) return { ok: false, error: "--port needs a value" };
-      const parsed = Number(value);
-      if (!Number.isInteger(parsed) || parsed < 0 || parsed > 65535) {
-        return { ok: false, error: "port must be an integer from 0 to 65535" };
-      }
-      port = parsed;
-      index += 1;
-      continue;
-    }
-
-    return { ok: false, error: `unknown option: ${argument}` };
   }
 
-  return { ok: true, value: { host, port, workspaces } };
+  if (options.host.length === 0) return { ok: false, error: "--host needs a value" };
+  if (options.store.length === 0) return { ok: false, error: "--store needs a value" };
+
+  return { ok: true, value: options };
 }
 
-/** Start the server and keep the process alive until SIGINT or SIGTERM. */
-export async function serve(options: ServeOptions): Promise<void> {
-  const registry = new RoomRegistry();
-  const directories = new Map<string, string>();
-  for (const directory of options.workspaces) {
-    const room = await loadWorkspace(directory);
-    registry.add(room);
-    directories.set(room.workspaceId, directory);
+export function formatStatus(options: ServeOptions): string {
+  return [
+    `${SERVER_NAME} ${SERVER_VERSION} (relay protocol ${RELAY_PROTOCOL_VERSION})`,
+    `address:  ${options.host}:${options.port}`,
+    `store:    ${options.store}`,
+    `signatures: ${options.trustAll ? "not checked (--trust-all)" : "checked"}`,
+  ].join("\n");
+}
+
+export async function runCli(argv: readonly string[]): Promise<CliResult> {
+  const [command, ...rest] = argv;
+
+  if (command === "--version" || command === "version") {
+    return { code: 0, stdout: `${SERVER_NAME} ${SERVER_VERSION}\n`, stderr: "" };
   }
 
-  const server = await createSyncServer({
-    registry,
-    store: new WorkspaceDirectoryStore(directories),
-    host: options.host,
-    port: options.port,
-  });
-
-  process.stdout.write(`${SERVER_NAME} listening on ${server.url}\n`);
-  process.stdout.write(`${SERVER_NAME}: ${registry.size} workspace(s)\n`);
-
-  await new Promise<void>((resolve) => {
-    const stop = (): void => {
-      process.off("SIGINT", stop);
-      process.off("SIGTERM", stop);
-      void server.close().then(resolve);
-    };
-    process.on("SIGINT", stop);
-    process.on("SIGTERM", stop);
-  });
-}
-
-export async function runWorkspaceCommand(argv: readonly string[]): Promise<CliResult> {
-  const [subcommand, directory, ...rest] = argv;
-
-  try {
-    if (subcommand === "init") {
-      if (directory === undefined || directory.startsWith("--")) {
-        return { code: 1, stdout: "", stderr: "workspace init needs a directory\n" };
-      }
-      const fromCanvas = flagValue(rest, "--from-canvas");
-      const workspaceId = flagValue(rest, "--workspace");
-      const ownerId = flagValue(rest, "--owner");
-      const editorId = flagValue(rest, "--editor");
-      const summary = await initWorkspace({
-        directory,
-        ...(fromCanvas === undefined ? {} : { fromCanvas }),
-        ...(workspaceId === undefined ? {} : { workspaceId }),
-        ...(ownerId === undefined ? {} : { ownerId }),
-        ...(editorId === undefined ? {} : { editorId }),
-        force: rest.includes("--force"),
-      });
-      return { code: 0, stdout: formatWorkspaceSummary(summary), stderr: "" };
-    }
-
-    if (subcommand === "show") {
-      if (directory === undefined || directory.startsWith("--")) {
-        return { code: 1, stdout: "", stderr: "workspace show needs a directory\n" };
-      }
-      return {
-        code: 0,
-        stdout: formatWorkspaceSummary(await showWorkspace(directory)),
-        stderr: "",
-      };
-    }
-
-    if (subcommand === "add-member") {
-      if (directory === undefined || directory.startsWith("--")) {
-        return { code: 1, stdout: "", stderr: "workspace add-member needs a directory\n" };
-      }
-      const memberId = flagValue(rest, "--member");
-      const role = flagValue(rest, "--role");
-      if (memberId === undefined) {
-        return { code: 1, stdout: "", stderr: "--member is required\n" };
-      }
-      if (role !== "editor" && role !== "viewer") {
-        return { code: 1, stdout: "", stderr: "--role must be editor or viewer\n" };
-      }
-      const summary = await addWorkspaceMember(directory, {
-        memberId,
-        role: role as MemberRole,
-        displayName: flagValue(rest, "--name") ?? "Member",
-      });
-      return { code: 0, stdout: formatWorkspaceSummary(summary), stderr: "" };
-    }
-
-    return {
-      code: 1,
-      stdout: "",
-      stderr: "workspace needs init, show or add-member\n",
-    };
-  } catch (error) {
-    return {
-      code: 1,
-      stdout: "",
-      stderr: `${error instanceof Error ? error.message : String(error)}\n`,
-    };
+  if (command === undefined || command === "--help" || command === "help") {
+    return { code: 0, stdout: USAGE, stderr: "" };
   }
-}
 
-function flagValue(argv: readonly string[], name: string): string | undefined {
-  const index = argv.indexOf(name);
-  if (index < 0) return undefined;
-  return argv[index + 1];
-}
+  const parsed = parseServeOptions(rest);
+  if (!parsed.ok) return { code: 2, stdout: "", stderr: `${parsed.error}\n${USAGE}` };
 
-const entry = process.argv[1];
-const isMain = entry !== undefined && import.meta.url === pathToFileURL(entry).href;
-
-if (isMain) {
-  const command = process.argv[2];
+  if (command === "status") {
+    return { code: 0, stdout: `${formatStatus(parsed.value)}\n`, stderr: "" };
+  }
 
   if (command === "serve") {
-    const parsed = parseServeOptions(process.argv.slice(3));
-    if (!parsed.ok) {
-      process.stderr.write(`${parsed.error}\n`);
-      process.exitCode = 1;
-    } else {
-      try {
-        await serve(parsed.value);
-      } catch (error) {
-        process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
-        process.exitCode = 1;
-      }
+    if (!parsed.value.trustAll) {
+      return {
+        code: 1,
+        stdout: "",
+        stderr:
+          "this host would check device signatures and has no device keys to check against.\n" +
+          "Run with --trust-all on a loopback address, or wait for the device registry.\n",
+      };
     }
-  } else if (command === "workspace") {
-    const result = await runWorkspaceCommand(process.argv.slice(3));
-    if (result.stdout.length > 0) process.stdout.write(result.stdout);
-    if (result.stderr.length > 0) process.stderr.write(result.stderr);
-    process.exitCode = result.code;
-  } else {
-    const result = runCli(process.argv.slice(2));
-    if (result.stdout.length > 0) process.stdout.write(result.stdout);
-    if (result.stderr.length > 0) process.stderr.write(result.stderr);
-    process.exitCode = result.code;
+    const server = await createSyncServer({
+      registry: new HostRegistry(),
+      host: parsed.value.host,
+      port: parsed.value.port,
+      store: new FileFrameStore(parsed.value.store),
+      verifyFrame: () => true,
+      verifyRole: () => true,
+    });
+    return {
+      code: 0,
+      stdout: `${formatStatus(parsed.value)}\nlistening on ${server.url}\n`,
+      stderr: "",
+    };
   }
+
+  return { code: 2, stdout: "", stderr: `unknown command: ${command}\n${USAGE}` };
+}
+
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
+  const result = await runCli(process.argv.slice(2));
+  if (result.stdout.length > 0) process.stdout.write(result.stdout);
+  if (result.stderr.length > 0) process.stderr.write(result.stderr);
+  process.exitCode = result.code;
 }

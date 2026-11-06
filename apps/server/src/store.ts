@@ -1,101 +1,84 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { workspaceFiles } from "./workspace.js";
+import { type Frame, frameSchema } from "@suite/sync";
 
 /**
- * Where a room's bytes live between process lifetimes.
+ * Where a host's frames live between process lifetimes.
  *
- * The store is deliberately dumb: it saves and loads an opaque snapshot. The
- * encryption layer will sit above it, so a file-backed store never needs to
- * know what a document contains.
+ * The store never parses a payload. It writes one line per frame and reads them back,
+ * which is the whole reason a file-backed store can sit under an encryption layer
+ * without knowing anything about documents.
+ *
+ * Appending rather than rewriting is also what makes the retention rule honest: a host
+ * may stop keeping old frames, and the only way that stays safe is if storing a frame
+ * never required understanding one.
  */
-export interface RoomStore {
-  load(workspaceId: string): Promise<Uint8Array | null>;
-  save(workspaceId: string, snapshot: Uint8Array): Promise<void>;
+export interface FrameStore {
+  load(workspaceId: string): Promise<readonly Frame[]>;
+  append(workspaceId: string, frame: Frame): Promise<void>;
 }
 
-export class MemoryRoomStore implements RoomStore {
-  private readonly snapshots = new Map<string, Uint8Array>();
+export class MemoryFrameStore implements FrameStore {
+  private readonly frames = new Map<string, Frame[]>();
 
-  async load(workspaceId: string): Promise<Uint8Array | null> {
-    return this.snapshots.get(workspaceId) ?? null;
+  async load(workspaceId: string): Promise<readonly Frame[]> {
+    return [...(this.frames.get(workspaceId) ?? [])];
   }
 
-  async save(workspaceId: string, snapshot: Uint8Array): Promise<void> {
-    this.snapshots.set(workspaceId, Uint8Array.from(snapshot));
+  async append(workspaceId: string, frame: Frame): Promise<void> {
+    const existing = this.frames.get(workspaceId) ?? [];
+    existing.push(frame);
+    this.frames.set(workspaceId, existing);
   }
 }
 
 /**
- * One file per workspace, written to a temporary name and renamed into place.
+ * One append-only file per workspace.
  *
- * A crash mid-write leaves the previous snapshot intact. A real deployment adds
- * `fsync` and a directory sync; this is the same shape `@suite/files/node` uses
- * for the app documents.
+ * A crash mid-append can leave a partial line. That line is dropped on load rather than
+ * failing the workspace, because one torn write should cost one frame, not the room: a
+ * frame is only ever a message some device can still send again.
  */
-export class FileRoomStore implements RoomStore {
+export class FileFrameStore implements FrameStore {
   readonly directory: string;
 
   constructor(directory: string) {
     this.directory = directory;
   }
 
-  async load(workspaceId: string): Promise<Uint8Array | null> {
+  async load(workspaceId: string): Promise<readonly Frame[]> {
+    let text: string;
     try {
-      const bytes = await readFile(this.pathFor(workspaceId));
-      return new Uint8Array(bytes);
+      text = await readFile(this.pathFor(workspaceId), "utf8");
     } catch (error) {
-      if (isMissingFile(error)) return null;
+      if (isMissingFile(error)) return [];
       throw error;
     }
+
+    const frames: Frame[] = [];
+    for (const line of text.split("\n")) {
+      if (line.trim().length === 0) continue;
+      const parsed = frameSchema.safeParse(safeJson(line));
+      if (parsed.success) frames.push(parsed.data);
+    }
+    return frames;
   }
 
-  async save(workspaceId: string, snapshot: Uint8Array): Promise<void> {
+  async append(workspaceId: string, frame: Frame): Promise<void> {
     await mkdir(this.directory, { recursive: true });
-    const target = this.pathFor(workspaceId);
-    const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temporary, snapshot);
-    await rename(temporary, target);
+    await appendFile(this.pathFor(workspaceId), `${JSON.stringify(frame)}\n`, "utf8");
   }
 
   private pathFor(workspaceId: string): string {
-    return join(this.directory, `${workspaceId}.snapshot`);
+    return join(this.directory, `${workspaceId}.frames.jsonl`);
   }
 }
 
-/**
- * The `serve` store: each workspace keeps its snapshot beside its
- * `membership.json`, not in one flat directory keyed by id. The CLI has the
- * directories; this maps a room id back to the directory it came from.
- */
-export class WorkspaceDirectoryStore implements RoomStore {
-  private readonly directories: ReadonlyMap<string, string>;
-
-  constructor(directories: ReadonlyMap<string, string>) {
-    this.directories = directories;
-  }
-
-  async load(workspaceId: string): Promise<Uint8Array | null> {
-    const directory = this.directories.get(workspaceId);
-    if (directory === undefined) return null;
-    try {
-      return new Uint8Array(await readFile(workspaceFiles(directory).snapshot));
-    } catch (error) {
-      if (isMissingFile(error)) return null;
-      throw error;
-    }
-  }
-
-  async save(workspaceId: string, snapshot: Uint8Array): Promise<void> {
-    const directory = this.directories.get(workspaceId);
-    if (directory === undefined) {
-      throw new Error(`no workspace directory for ${workspaceId}`);
-    }
-    await mkdir(directory, { recursive: true });
-    const target = workspaceFiles(directory).snapshot;
-    const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
-    await writeFile(temporary, snapshot);
-    await rename(temporary, target);
+function safeJson(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return null;
   }
 }
 

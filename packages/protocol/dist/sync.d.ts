@@ -34,10 +34,10 @@ export declare const syncAckSchema: z.ZodObject<{
 export declare const syncErrorCodeSchema: z.ZodEnum<{
     unknown: "unknown";
     "protocol-version": "protocol-version";
+    malformed: "malformed";
     unauthorized: "unauthorized";
     forbidden: "forbidden";
     "epoch-mismatch": "epoch-mismatch";
-    malformed: "malformed";
     busy: "busy";
 }>;
 export type SyncErrorCode = z.infer<typeof syncErrorCodeSchema>;
@@ -46,10 +46,10 @@ export declare const syncErrorSchema: z.ZodObject<{
     code: z.ZodEnum<{
         unknown: "unknown";
         "protocol-version": "protocol-version";
+        malformed: "malformed";
         unauthorized: "unauthorized";
         forbidden: "forbidden";
         "epoch-mismatch": "epoch-mismatch";
-        malformed: "malformed";
         busy: "busy";
     }>;
     message: z.ZodString;
@@ -78,10 +78,10 @@ export declare const syncMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     code: z.ZodEnum<{
         unknown: "unknown";
         "protocol-version": "protocol-version";
+        malformed: "malformed";
         unauthorized: "unauthorized";
         forbidden: "forbidden";
         "epoch-mismatch": "epoch-mismatch";
-        malformed: "malformed";
         busy: "busy";
     }>;
     message: z.ZodString;

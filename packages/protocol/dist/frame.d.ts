@@ -27,6 +27,26 @@ export declare const frameHeaderSchema: z.ZodObject<{
     payload: z.ZodString;
 }, z.core.$strict>;
 export type FrameHeader = z.infer<typeof frameHeaderSchema>;
+/**
+ * A frame as a sender writes it: the header plus its signature, and no arrival time.
+ *
+ * The sender must not claim when its frame arrived. That field is the host's, and a
+ * client-side clock is exactly the sort of thing that decides which of two frames looks
+ * newer.
+ */
+export declare const sealedFrameSchema: z.ZodObject<{
+    kind: z.ZodEnum<{
+        commit: "commit";
+        welcome: "welcome";
+        application: "application";
+    }>;
+    workspaceId: z.ZodString;
+    deviceId: z.ZodString;
+    epoch: z.ZodNumber;
+    payload: z.ZodString;
+    signature: z.ZodString;
+}, z.core.$strict>;
+export type SealedFrame = z.infer<typeof sealedFrameSchema>;
 export declare const frameSchema: z.ZodObject<{
     kind: z.ZodEnum<{
         commit: "commit";
@@ -43,7 +63,19 @@ export declare const frameSchema: z.ZodObject<{
 export type Frame = z.infer<typeof frameSchema>;
 /** The bytes a device signs, and the bytes a reader verifies. */
 export declare function framePayload(header: FrameHeader): Uint8Array;
-export type FrameRejection = "stale-epoch" | "wrong-workspace";
+/**
+ * Why a frame was refused.
+ *
+ * The first two are the receiving client's reasons; the last two are the host's. They
+ * travel on the wire, so they are one vocabulary rather than two.
+ */
+export declare const frameRejectionSchema: z.ZodEnum<{
+    "wrong-workspace": "wrong-workspace";
+    "stale-epoch": "stale-epoch";
+    "not-authorized": "not-authorized";
+    "invalid-signature": "invalid-signature";
+}>;
+export type FrameRejection = z.infer<typeof frameRejectionSchema>;
 /**
  * Whether a client may read this frame.
  *

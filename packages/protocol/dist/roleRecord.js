@@ -26,6 +26,14 @@ export const roleRecordSchema = z
     signature: z.string().min(1),
 })
     .strict();
+export const roleRejectionSchema = z.enum([
+    "wrong-workspace",
+    "invalid-signature",
+    "wrong-seq",
+    "not-owner",
+    "last-owner",
+    "role-unchanged",
+]);
 export function createRoleState(workspaceId) {
     return { workspaceId, lastSeq: {}, roles: {} };
 }

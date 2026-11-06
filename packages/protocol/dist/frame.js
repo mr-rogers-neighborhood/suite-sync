@@ -22,10 +22,21 @@ export const frameHeaderSchema = z
     payload: z.string().min(1),
 })
     .strict();
-export const frameSchema = frameHeaderSchema
+/**
+ * A frame as a sender writes it: the header plus its signature, and no arrival time.
+ *
+ * The sender must not claim when its frame arrived. That field is the host's, and a
+ * client-side clock is exactly the sort of thing that decides which of two frames looks
+ * newer.
+ */
+export const sealedFrameSchema = frameHeaderSchema
     .extend({
     /** Device-key signature over the header fields and the payload. */
     signature: z.string().min(1),
+})
+    .strict();
+export const frameSchema = sealedFrameSchema
+    .extend({
     /** Stamped by the host on arrival, not claimed by the sender. */
     receivedAt: z.string().min(1),
 })
@@ -41,6 +52,18 @@ export function framePayload(header) {
     ].join("\n");
     return new TextEncoder().encode(ordered);
 }
+/**
+ * Why a frame was refused.
+ *
+ * The first two are the receiving client's reasons; the last two are the host's. They
+ * travel on the wire, so they are one vocabulary rather than two.
+ */
+export const frameRejectionSchema = z.enum([
+    "wrong-workspace",
+    "stale-epoch",
+    "not-authorized",
+    "invalid-signature",
+]);
 /**
  * Whether a client may read this frame.
  *

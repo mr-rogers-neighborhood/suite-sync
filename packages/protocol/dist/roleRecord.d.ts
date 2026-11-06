@@ -29,6 +29,14 @@ export interface RoleState {
     readonly lastSeq: Readonly<Record<string, number>>;
     readonly roles: Readonly<Record<string, MemberRole>>;
 }
+export declare const roleRejectionSchema: z.ZodEnum<{
+    "wrong-workspace": "wrong-workspace";
+    "invalid-signature": "invalid-signature";
+    "wrong-seq": "wrong-seq";
+    "not-owner": "not-owner";
+    "last-owner": "last-owner";
+    "role-unchanged": "role-unchanged";
+}>;
 export type RoleRejection = "wrong-workspace" | "invalid-signature" | "wrong-seq" | "not-owner" | "last-owner" | "role-unchanged";
 export type RoleResult = {
     readonly ok: true;

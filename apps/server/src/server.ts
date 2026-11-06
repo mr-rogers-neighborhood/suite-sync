@@ -1,38 +1,44 @@
 import { createServer } from "node:http";
 import {
-  decodeBase64,
-  decodeSyncMessage,
-  encodeBase64,
-  encodeSyncMessage,
-  isProtocolCompatible,
-  SERVER_DEVICE_ID,
-  SYNC_PROTOCOL_VERSION,
-  type SyncErrorCode,
-  type SyncHello,
-  type SyncMessage,
+  applyRoleRecord,
+  createRoleState,
+  encodeRelayMessage,
+  isRelayCompatible,
+  parseClientMessage,
+  RELAY_PROTOCOL_VERSION,
+  type RelayClientMessage,
+  type RoleState,
+  type RoleVerifier,
 } from "@suite/sync";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
-import type { RoomRejection, SyncRoom } from "./room.js";
-import { MemoryRoomStore, type RoomStore } from "./store.js";
+import { admitFrame, FrameLog, type FrameVerifier } from "./blindRoom.js";
+import { FileFrameStore, type FrameStore } from "./store.js";
 
-export { SERVER_DEVICE_ID };
+/**
+ * The host: a mailbox with an opinion about who may post.
+ *
+ * It accepts frames, numbers them, writes them down and hands out the ones a client has
+ * not seen. It answers no question about a document, because it cannot read one.
+ */
+export interface HostedRoom {
+  readonly workspaceId: string;
+  readonly log: FrameLog;
+  roles: RoleState;
+  readonly sockets: Set<WebSocket>;
+}
 
-export class RoomRegistry {
-  private readonly rooms = new Map<string, SyncRoom>();
+export class HostRegistry {
+  private readonly rooms = new Map<string, HostedRoom>();
 
-  add(room: SyncRoom): void {
+  add(room: HostedRoom): void {
     this.rooms.set(room.workspaceId, room);
   }
 
-  get(workspaceId: string): SyncRoom | undefined {
+  get(workspaceId: string): HostedRoom | undefined {
     return this.rooms.get(workspaceId);
   }
 
-  remove(workspaceId: string): boolean {
-    return this.rooms.delete(workspaceId);
-  }
-
-  list(): readonly SyncRoom[] {
+  list(): readonly HostedRoom[] {
     return [...this.rooms.values()];
   }
 
@@ -42,11 +48,18 @@ export class RoomRegistry {
 }
 
 export interface SyncServerOptions {
-  readonly registry: RoomRegistry;
+  readonly registry: HostRegistry;
   /** 0 asks the operating system for a free port; useful in tests. */
   readonly port?: number;
   readonly host?: string;
-  readonly store?: RoomStore;
+  readonly store?: FrameStore;
+  /** Device key check for incoming frames. */
+  readonly verifyFrame: FrameVerifier;
+  /** Device key check for role records. */
+  readonly verifyRole: RoleVerifier;
+  /** How long a frame is kept. A device away longer needs a snapshot from a peer. */
+  readonly retentionDays?: number;
+  readonly now?: () => Date;
 }
 
 export interface SyncServer {
@@ -58,29 +71,18 @@ export interface SyncServer {
 }
 
 interface SocketContext {
-  readonly room: SyncRoom;
-  readonly memberId: string;
+  readonly room: HostedRoom;
   readonly deviceId: string;
 }
 
-/**
- * The WebSocket adapter around a room.
- *
- * This is Phase 2's transport, not the finished server: it has no TLS and no
- * encryption. It binds to loopback by default and is meant to be paired with
- * the identity/encryption phase before it is exposed beyond a trusted network.
- */
+const DEFAULT_RETENTION_DAYS = 30;
+
 export async function createSyncServer(options: SyncServerOptions): Promise<SyncServer> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 0;
-  const store = options.store ?? new MemoryRoomStore();
-
-  // A room that cannot be restored refuses the boot rather than serving an
-  // empty document over a snapshot someone already trusted.
-  for (const room of options.registry.list()) {
-    const snapshot = await store.load(room.workspaceId);
-    if (snapshot !== null) room.restore(snapshot);
-  }
+  const store = options.store ?? new FileFrameStore(".suite-sync");
+  const now = options.now ?? (() => new Date());
+  const retentionDays = options.retentionDays ?? DEFAULT_RETENTION_DAYS;
 
   const httpServer = createServer((request, response) => {
     if (request.url === "/health") {
@@ -88,7 +90,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       response.end(
         JSON.stringify({
           ok: true,
-          rooms: options.registry.size,
+          workspaces: options.registry.size,
           clients: wss.clients.size,
         }),
       );
@@ -100,250 +102,201 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
 
   const wss = new WebSocketServer({ server: httpServer, path: "/sync" });
   const contexts = new WeakMap<WebSocket, SocketContext>();
-  const saveTimers = new Map<string, NodeJS.Timeout>();
-  const saveChains = new Map<string, Promise<void>>();
+  const loading = new Map<string, Promise<HostedRoom>>();
 
-  function enqueueSave(room: SyncRoom): void {
-    const workspaceId = room.workspaceId;
-    const previous = saveChains.get(workspaceId) ?? Promise.resolve();
-    const next = previous
-      .then(() => store.save(workspaceId, room.snapshot()))
-      .catch((error: unknown) => {
-        process.stderr.write(`suite-sync: could not save ${workspaceId}: ${String(error)}\n`);
-      });
+  async function roomFor(workspaceId: string): Promise<HostedRoom> {
+    const existing = options.registry.get(workspaceId);
+    if (existing !== undefined) return existing;
 
-    saveChains.set(workspaceId, next);
-    void next.finally(() => {
-      if (saveChains.get(workspaceId) === next) saveChains.delete(workspaceId);
-    });
-  }
+    const pending = loading.get(workspaceId);
+    if (pending !== undefined) return pending;
 
-  function scheduleSave(room: SyncRoom): void {
-    const existing = saveTimers.get(room.workspaceId);
-    if (existing !== undefined) clearTimeout(existing);
+    const created = (async () => {
+      const room: HostedRoom = {
+        workspaceId,
+        log: new FrameLog(workspaceId),
+        roles: createRoleState(workspaceId),
+        sockets: new Set(),
+      };
+      for (const frame of await store.load(workspaceId)) room.log.append(frame);
+      room.log.dropOlderThan(cutoffIso(now(), retentionDays));
+      options.registry.add(room);
+      return room;
+    })();
 
-    const timer = setTimeout(() => {
-      saveTimers.delete(room.workspaceId);
-      enqueueSave(room);
-    }, 100);
-    timer.unref();
-    saveTimers.set(room.workspaceId, timer);
-  }
-
-  async function flushSaves(): Promise<void> {
-    const dirty = [...saveTimers.keys()];
-    for (const timer of saveTimers.values()) clearTimeout(timer);
-    saveTimers.clear();
-
-    for (const workspaceId of dirty) {
-      const room = options.registry.get(workspaceId);
-      if (room !== undefined) enqueueSave(room);
+    loading.set(workspaceId, created);
+    try {
+      return await created;
+    } finally {
+      loading.delete(workspaceId);
     }
-
-    await Promise.all([...saveChains.values()]);
   }
 
   wss.on("connection", (socket) => {
     socket.on("message", (data) => {
-      handleMessage(socket, data);
+      void handleMessage(socket, data);
+    });
+    socket.on("close", () => {
+      const context = contexts.get(socket);
+      context?.room.sockets.delete(socket);
     });
   });
 
-  function handleMessage(socket: WebSocket, data: RawData): void {
-    const parsed = decodeSyncMessage(rawText(data));
-    if (!parsed.ok) {
-      sendError(socket, "malformed", parsed.issues.join("; "));
+  async function handleMessage(socket: WebSocket, data: RawData): Promise<void> {
+    const message = parseClientMessage(safeJson(rawText(data)));
+    if (message === null) {
+      sendError(socket, "malformed", "that is not a relay message");
       return;
     }
 
-    switch (parsed.value.type) {
-      case "hello":
-        handleHello(socket, parsed.value);
+    if (message.type === "join") {
+      await handleJoin(socket, message);
+      return;
+    }
+
+    const context = contexts.get(socket);
+    if (context === undefined) {
+      sendError(socket, "not-joined", "join before sending anything else");
+      return;
+    }
+
+    switch (message.type) {
+      case "role":
+        handleRole(context, message.record);
         return;
-      case "update":
-        handleUpdate(socket, parsed.value);
+      case "frame":
+        await handleFrame(socket, context, message.frame);
         return;
-      case "ack":
-      case "error":
+      case "since":
+        handleSince(socket, context, message.after);
         return;
     }
   }
 
-  function handleHello(socket: WebSocket, message: SyncHello): void {
+  async function handleJoin(socket: WebSocket, message: RelayClientMessage): Promise<void> {
+    if (message.type !== "join") return;
     if (contexts.has(socket)) {
       sendError(socket, "malformed", "this socket has already joined");
       return;
     }
-    if (!isProtocolCompatible(message.protocolVersion)) {
-      sendError(socket, "protocol-version", `this server speaks protocol ${SYNC_PROTOCOL_VERSION}`);
+    if (!isRelayCompatible(message.protocolVersion)) {
+      sendError(socket, "protocol-version", `this host speaks protocol ${RELAY_PROTOCOL_VERSION}`);
       return;
     }
 
-    const room = options.registry.get(message.workspaceId);
-    if (room === undefined) {
-      sendError(socket, "unknown", "no such workspace");
-      return;
-    }
-
-    const joined = room.join({
-      memberId: message.memberId,
-      deviceId: message.deviceId,
-      epoch: message.epoch,
-      versionVector: message.versionVector,
-    });
-    if (!joined.ok) {
-      sendError(socket, codeFor(joined.reason), joined.reason);
-      return;
-    }
-
-    contexts.set(socket, {
-      room,
-      memberId: message.memberId,
-      deviceId: message.deviceId,
-    });
-
-    // Catch-up first, then the ack: the client's "synced" signal fires on the
-    // ack, so it must not run before the history it is waiting for is applied.
-    if (joined.update.length > 0) {
-      send(socket, {
-        type: "update",
-        workspaceId: room.workspaceId,
-        from: SERVER_DEVICE_ID,
-        to: message.deviceId,
-        epoch: joined.epoch,
-        payload: encodeBase64(joined.update),
-      });
-    }
+    const room = await roomFor(message.workspaceId);
+    contexts.set(socket, { room, deviceId: message.deviceId });
+    room.sockets.add(socket);
 
     send(socket, {
-      type: "ack",
-      epoch: joined.epoch,
-      versionVector: joined.versionVector,
+      type: "joined",
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      workspaceId: room.workspaceId,
+      newestEpoch: room.log.newestEpoch,
+      frames: room.log.length,
     });
   }
 
-  function handleUpdate(
-    socket: WebSocket,
-    message: Extract<SyncMessage, { type: "update" }>,
-  ): void {
-    const context = contexts.get(socket);
-    if (context === undefined) {
-      sendError(socket, "unauthorized", "send hello first");
-      return;
-    }
-    if (message.workspaceId !== context.room.workspaceId) {
-      sendError(socket, "unauthorized", "that update belongs to another workspace");
-      return;
-    }
-    if (message.from !== context.deviceId) {
-      sendError(socket, "unauthorized", "from does not match the joined device");
-      return;
-    }
-    if (message.epoch !== context.room.epoch) {
-      sendError(socket, "epoch-mismatch", "the workspace epoch changed");
-      return;
-    }
-
-    const bytes = decodeBase64(message.payload);
-    if (bytes === null) {
-      sendError(socket, "malformed", "the payload is not base64");
-      return;
-    }
-
-    const applied = context.room.applyFrom(context.memberId, bytes);
+  function handleRole(context: SocketContext, record: Parameters<typeof applyRoleRecord>[1]): void {
+    const applied = applyRoleRecord(context.room.roles, record, options.verifyRole);
     if (!applied.ok) {
-      sendError(socket, codeFor(applied.reason), applied.reason);
+      send(context.room.sockets, {
+        type: "refused",
+        reason: applied.reason,
+      });
+      return;
+    }
+    context.room.roles = applied.state;
+  }
+
+  async function handleFrame(
+    socket: WebSocket,
+    context: SocketContext,
+    sealed: Parameters<typeof admitFrame>[0],
+  ): Promise<void> {
+    const verdict = admitFrame(
+      sealed,
+      { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch },
+      context.room.roles,
+      options.verifyFrame,
+      now().toISOString(),
+    );
+
+    if (!verdict.ok) {
+      send(socket, { type: "refused", reason: verdict.reason });
       return;
     }
 
-    scheduleSave(context.room);
+    const index = context.room.log.length;
+    context.room.log.append(verdict.frame);
+    await store.append(context.room.workspaceId, verdict.frame);
 
-    send(socket, {
-      type: "ack",
-      epoch: context.room.epoch,
-      versionVector: applied.versionVector,
-    });
+    const relayed = { type: "frame" as const, index, frame: verdict.frame };
+    send(socket, relayed);
+    for (const peer of context.room.sockets) {
+      if (peer !== socket) send(peer, relayed);
+    }
+  }
 
-    for (const client of wss.clients) {
-      if (client === socket || client.readyState !== WebSocket.OPEN) continue;
-      const peer = contexts.get(client);
-      if (peer === undefined || peer.room !== context.room) continue;
-      send(client, {
-        type: "update",
-        workspaceId: context.room.workspaceId,
-        from: context.deviceId,
-        to: peer.deviceId,
-        epoch: context.room.epoch,
-        payload: message.payload,
-      });
+  function handleSince(socket: WebSocket, context: SocketContext, after: number): void {
+    const frames = context.room.log.since(after);
+    for (const [offset, frame] of frames.entries()) {
+      send(socket, { type: "frame", index: after + offset, frame });
     }
   }
 
   await new Promise<void>((resolve, reject) => {
-    const onError = (error: Error): void => {
-      httpServer.off("listening", onListening);
-      reject(error);
-    };
-    const onListening = (): void => {
-      httpServer.off("error", onError);
+    httpServer.once("error", reject);
+    httpServer.listen(port, host, () => {
+      httpServer.removeListener("error", reject);
       resolve();
-    };
-    httpServer.once("error", onError);
-    httpServer.once("listening", onListening);
-    httpServer.listen(port, host);
+    });
   });
 
   const address = httpServer.address();
-  const actualPort = typeof address === "object" && address !== null ? address.port : port;
-
-  let closing: Promise<void> | null = null;
-  const close = (): Promise<void> => {
-    if (closing !== null) return closing;
-    closing = (async () => {
-      await flushSaves();
-      for (const client of wss.clients) client.terminate();
-      await new Promise<void>((resolve) => wss.close(() => resolve()));
-      await new Promise<void>((resolve, reject) => {
-        httpServer.close((error) => (error ? reject(error) : resolve()));
-      });
-    })();
-    return closing;
-  };
+  const boundPort = typeof address === "object" && address !== null ? address.port : port;
 
   return {
     host,
-    port: actualPort,
-    url: `ws://${host}:${actualPort}/sync`,
-    close,
+    port: boundPort,
+    url: `ws://${host}:${boundPort}/sync`,
+    async close() {
+      for (const socket of wss.clients) socket.terminate();
+      await new Promise<void>((resolve) => wss.close(() => resolve()));
+      await new Promise<void>((resolve) => httpServer.close(() => resolve()));
+    },
   };
+}
+
+function cutoffIso(now: Date, days: number): string {
+  return new Date(now.getTime() - days * 24 * 60 * 60 * 1000).toISOString();
+}
+
+function send(socket: WebSocket | Set<WebSocket>, message: unknown): void {
+  const text = encodeRelayMessage(message as Parameters<typeof encodeRelayMessage>[0]);
+  for (const target of socket instanceof Set ? socket : [socket]) {
+    if (target.readyState === WebSocket.OPEN) target.send(text);
+  }
+}
+
+function sendError(
+  socket: WebSocket,
+  code: "malformed" | "not-joined" | "protocol-version" | "unknown",
+  message: string,
+): void {
+  send(socket, { type: "error", code, message });
 }
 
 function rawText(data: RawData): string {
   if (typeof data === "string") return data;
-  if (data instanceof ArrayBuffer) return Buffer.from(data).toString("utf8");
   if (Array.isArray(data)) return Buffer.concat(data).toString("utf8");
   return data.toString("utf8");
 }
 
-function send(socket: WebSocket, message: SyncMessage): void {
-  if (socket.readyState !== WebSocket.OPEN) return;
-  socket.send(encodeSyncMessage(message));
-}
-
-function sendError(socket: WebSocket, code: SyncErrorCode, message: string): void {
-  send(socket, { type: "error", code, message: message.slice(0, 500) });
-}
-
-function codeFor(reason: RoomRejection): SyncErrorCode {
-  switch (reason) {
-    case "not-member":
-    case "member-inactive":
-      return "unauthorized";
-    case "epoch-mismatch":
-      return "epoch-mismatch";
-    case "viewer-cannot-write":
-      return "forbidden";
-    case "invalid-update":
-      return "malformed";
+function safeJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
 }

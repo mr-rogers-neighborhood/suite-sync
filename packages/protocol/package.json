@@ -1,7 +1,7 @@
 {
   "name": "@suite/sync",
-  "version": "0.3.4",
-  "description": "The Suite sync protocol: workspace, device and member identity, signed membership, version vectors and wire messages. The root entry is pure TypeScript with no Loro; ./loro is the Loro document and WebSocket client half.",
+  "version": "0.4.0",
+  "description": "The Suite sync protocol: the MLS group a device belongs to, the frames a blind host stores, and the role records that decide who may write. Pure TypeScript, no document format.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -10,11 +10,6 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./loro": {
-      "types": "./dist/loro/index.d.ts",
-      "import": "./dist/loro/index.js",
-      "default": "./dist/loro/index.js"
     }
   },
   "files": [
@@ -26,7 +21,6 @@
   },
   "dependencies": {
     "@noble/hashes": "^2.4.0",
-    "loro-crdt": "^1.16.4",
     "ts-mls": "1.6.4",
     "zod": "^4.6.7"
   },

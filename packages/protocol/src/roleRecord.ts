@@ -36,6 +36,15 @@ export interface RoleState {
   readonly roles: Readonly<Record<string, MemberRole>>;
 }
 
+export const roleRejectionSchema = z.enum([
+  "wrong-workspace",
+  "invalid-signature",
+  "wrong-seq",
+  "not-owner",
+  "last-owner",
+  "role-unchanged",
+]);
+
 export type RoleRejection =
   | "wrong-workspace"
   | "invalid-signature"
