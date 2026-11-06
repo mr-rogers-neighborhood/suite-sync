@@ -45,6 +45,13 @@ node apps/server/dist/cli.js workspace add-member /tmp/demo \
 node apps/server/dist/cli.js serve --workspace /tmp/demo
 ```
 
+## Working on the whole suite
+
+The hub, the sync server and the three apps are developed together from
+[`suite-dev`](https://github.com/mr-rogers-neighborhood/suite-dev), which assumes the repositories are
+cloned side by side. It stages the real binaries, runs the hub and the sync server together, seeds a
+workspace, and owns the cross-app e2e suite. `pnpm preflight` there says what is missing.
+
 ## The model in one page
 
 - **The document is a file.** Loro owns the document; this repository never defines an app schema.
