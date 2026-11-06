@@ -204,7 +204,7 @@ importers:
   packages/host:
     dependencies:
       '@suite/sync':
-        specifier: workspace:*
+        specifier: ^0.6.0
         version: link:../protocol
       ws:
         specifier: ^8.22.1
