@@ -10,6 +10,7 @@ import { z } from "zod";
  * without trusting the host's ordering.
  */
 export declare const frameKindSchema: z.ZodEnum<{
+    keypackage: "keypackage";
     commit: "commit";
     welcome: "welcome";
     application: "application";
@@ -17,6 +18,7 @@ export declare const frameKindSchema: z.ZodEnum<{
 export type FrameKind = z.infer<typeof frameKindSchema>;
 export declare const frameHeaderSchema: z.ZodObject<{
     kind: z.ZodEnum<{
+        keypackage: "keypackage";
         commit: "commit";
         welcome: "welcome";
         application: "application";
@@ -36,6 +38,7 @@ export type FrameHeader = z.infer<typeof frameHeaderSchema>;
  */
 export declare const sealedFrameSchema: z.ZodObject<{
     kind: z.ZodEnum<{
+        keypackage: "keypackage";
         commit: "commit";
         welcome: "welcome";
         application: "application";
@@ -49,6 +52,7 @@ export declare const sealedFrameSchema: z.ZodObject<{
 export type SealedFrame = z.infer<typeof sealedFrameSchema>;
 export declare const frameSchema: z.ZodObject<{
     kind: z.ZodEnum<{
+        keypackage: "keypackage";
         commit: "commit";
         welcome: "welcome";
         application: "application";

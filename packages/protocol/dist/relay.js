@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { frameRejectionSchema, frameSchema, sealedFrameSchema } from "./frame.js";
 import { deviceIdSchema, workspaceIdSchema } from "./ids.js";
+import { inviteRecordSchema, inviteRejectionSchema } from "./invite.js";
 import { roleRecordSchema, roleRejectionSchema } from "./roleRecord.js";
 /**
  * What a host and a client say to each other.
@@ -28,6 +29,24 @@ const joinSchema = z
     publicKey: z.string().min(1),
 })
     .strict();
+/** An invite an owner wrote. The host keeps it and asks nothing else about it. */
+const inviteSchema = z.object({ type: z.literal("invite"), record: inviteRecordSchema }).strict();
+/**
+ * A key package from a device that has no role yet.
+ *
+ * It carries the device id and key the frame is signed with, because the host has to pin
+ * them before it can check the signature — and this is the only message a device sends
+ * before it is a member.
+ */
+const keyPackageSchema = z
+    .object({
+    type: z.literal("keypackage"),
+    inviteId: z.string().min(1),
+    deviceId: deviceIdSchema,
+    publicKey: z.string().min(1),
+    frame: sealedFrameSchema,
+})
+    .strict();
 /** A role record, so the host can refuse a viewer without reading anything. */
 const roleSchema = z.object({ type: z.literal("role"), record: roleRecordSchema }).strict();
 /** One sealed frame, on its way to the store and everybody else. */
@@ -38,6 +57,8 @@ const sinceSchema = z
     .strict();
 export const relayClientMessageSchema = z.discriminatedUnion("type", [
     joinSchema,
+    inviteSchema,
+    keyPackageSchema,
     roleSchema,
     sealedSchema,
     sinceSchema,
@@ -75,11 +96,15 @@ const appliedSchema = z
     seq: z.number().int().nonnegative(),
 })
     .strict();
+/** An invite the host accepted, echoed to the owner so it knows the code is live. */
+const invitedSchema = z
+    .object({ type: z.literal("invited"), inviteId: z.string().min(1) })
+    .strict();
 const refusedSchema = z
     .object({
     type: z.literal("refused"),
     /** A frame the host would not store, or a role record it would not apply. */
-    reason: z.union([frameRejectionSchema, roleRejectionSchema]),
+    reason: z.union([frameRejectionSchema, roleRejectionSchema, inviteRejectionSchema]),
 })
     .strict();
 export const relayErrorCodeSchema = z.enum([
@@ -98,6 +123,7 @@ const errorSchema = z
 export const relayHostMessageSchema = z.discriminatedUnion("type", [
     joinedSchema,
     appliedSchema,
+    invitedSchema,
     frameOutSchema,
     refusedSchema,
     errorSchema,

@@ -1,4 +1,4 @@
-import { type RoleState, type RoleVerifier } from "@suite/sync";
+import { type InviteState, type RoleState, type RoleVerifier } from "@suite/sync";
 import { WebSocket } from "ws";
 import { FrameLog, type FrameVerifier } from "./blindRoom.js";
 import { type HostStore, type PinnedKey } from "./store.js";
@@ -12,6 +12,8 @@ export interface HostedRoom {
     readonly workspaceId: string;
     readonly log: FrameLog;
     roles: RoleState;
+    /** Invitations an owner wrote. A live one lets exactly one key package through. */
+    invites: InviteState;
     /** The key each device joined with. Without it a restart could verify nothing. */
     readonly keys: Map<string, string>;
     readonly sockets: Set<WebSocket>;

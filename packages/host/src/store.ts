@@ -1,6 +1,13 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { type Frame, frameSchema, type RoleRecord, roleRecordSchema } from "@suite/sync";
+import {
+  type Frame,
+  frameSchema,
+  type InviteRecord,
+  inviteRecordSchema,
+  type RoleRecord,
+  roleRecordSchema,
+} from "@suite/sync";
 
 /**
  * What a host keeps between process lifetimes: frames, and who may write.
@@ -17,6 +24,9 @@ export interface HostStore {
   appendFrame(workspaceId: string, frame: Frame): Promise<void>;
   loadRoles(workspaceId: string): Promise<readonly RoleRecord[]>;
   appendRole(workspaceId: string, record: RoleRecord): Promise<void>;
+  /** Invites an owner wrote. They expire, so they are kept as records rather than as grants. */
+  loadInvites(workspaceId: string): Promise<readonly InviteRecord[]>;
+  appendInvite(workspaceId: string, record: InviteRecord): Promise<void>;
   /** The public key a device joined with, so its signature can be checked after a restart. */
   loadKeys(workspaceId: string): Promise<readonly PinnedKey[]>;
   appendKey(workspaceId: string, key: PinnedKey): Promise<void>;
@@ -31,6 +41,7 @@ export interface PinnedKey {
 
 export class MemoryHostStore implements HostStore {
   private readonly frames = new Map<string, Frame[]>();
+  private readonly invites = new Map<string, InviteRecord[]>();
   private readonly roles = new Map<string, RoleRecord[]>();
   private readonly keys = new Map<string, PinnedKey[]>();
 
@@ -52,6 +63,16 @@ export class MemoryHostStore implements HostStore {
     const existing = this.roles.get(workspaceId) ?? [];
     existing.push(record);
     this.roles.set(workspaceId, existing);
+  }
+
+  async loadInvites(workspaceId: string): Promise<readonly InviteRecord[]> {
+    return [...(this.invites.get(workspaceId) ?? [])];
+  }
+
+  async appendInvite(workspaceId: string, record: InviteRecord): Promise<void> {
+    const existing = this.invites.get(workspaceId) ?? [];
+    existing.push(record);
+    this.invites.set(workspaceId, existing);
   }
 
   async loadKeys(workspaceId: string): Promise<readonly PinnedKey[]> {
@@ -100,6 +121,17 @@ export class FileHostStore implements HostStore {
     await this.appendLine(this.rolePath(workspaceId), record);
   }
 
+  async loadInvites(workspaceId: string): Promise<readonly InviteRecord[]> {
+    return readLines(
+      this.invitePath(workspaceId),
+      (value) => inviteRecordSchema.safeParse(value).data,
+    );
+  }
+
+  async appendInvite(workspaceId: string, record: InviteRecord): Promise<void> {
+    await this.appendLine(this.invitePath(workspaceId), record);
+  }
+
   async loadKeys(workspaceId: string): Promise<readonly PinnedKey[]> {
     return readLines(this.keyPath(workspaceId), (value) => pinnedKey(value));
   }
@@ -128,6 +160,10 @@ export class FileHostStore implements HostStore {
 
   private rolePath(workspaceId: string): string {
     return join(this.directory, `${workspaceId}.roles.jsonl`);
+  }
+
+  private invitePath(workspaceId: string): string {
+    return join(this.directory, `${workspaceId}.invites.jsonl`);
   }
 
   private keyPath(workspaceId: string): string {

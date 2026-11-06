@@ -1,4 +1,4 @@
-import { type Frame, type RoleRecord } from "@suite/sync";
+import { type Frame, type InviteRecord, type RoleRecord } from "@suite/sync";
 /**
  * What a host keeps between process lifetimes: frames, and who may write.
  *
@@ -14,6 +14,9 @@ export interface HostStore {
     appendFrame(workspaceId: string, frame: Frame): Promise<void>;
     loadRoles(workspaceId: string): Promise<readonly RoleRecord[]>;
     appendRole(workspaceId: string, record: RoleRecord): Promise<void>;
+    /** Invites an owner wrote. They expire, so they are kept as records rather than as grants. */
+    loadInvites(workspaceId: string): Promise<readonly InviteRecord[]>;
+    appendInvite(workspaceId: string, record: InviteRecord): Promise<void>;
     /** The public key a device joined with, so its signature can be checked after a restart. */
     loadKeys(workspaceId: string): Promise<readonly PinnedKey[]>;
     appendKey(workspaceId: string, key: PinnedKey): Promise<void>;
@@ -26,12 +29,15 @@ export interface PinnedKey {
 }
 export declare class MemoryHostStore implements HostStore {
     private readonly frames;
+    private readonly invites;
     private readonly roles;
     private readonly keys;
     loadFrames(workspaceId: string): Promise<readonly Frame[]>;
     appendFrame(workspaceId: string, frame: Frame): Promise<void>;
     loadRoles(workspaceId: string): Promise<readonly RoleRecord[]>;
     appendRole(workspaceId: string, record: RoleRecord): Promise<void>;
+    loadInvites(workspaceId: string): Promise<readonly InviteRecord[]>;
+    appendInvite(workspaceId: string, record: InviteRecord): Promise<void>;
     loadKeys(workspaceId: string): Promise<readonly PinnedKey[]>;
     appendKey(workspaceId: string, key: PinnedKey): Promise<void>;
     compact(workspaceId: string, cutoff: string): Promise<void>;
@@ -50,12 +56,15 @@ export declare class FileHostStore implements HostStore {
     appendFrame(workspaceId: string, frame: Frame): Promise<void>;
     loadRoles(workspaceId: string): Promise<readonly RoleRecord[]>;
     appendRole(workspaceId: string, record: RoleRecord): Promise<void>;
+    loadInvites(workspaceId: string): Promise<readonly InviteRecord[]>;
+    appendInvite(workspaceId: string, record: InviteRecord): Promise<void>;
     loadKeys(workspaceId: string): Promise<readonly PinnedKey[]>;
     appendKey(workspaceId: string, key: PinnedKey): Promise<void>;
     compact(workspaceId: string, cutoff: string): Promise<void>;
     private appendLine;
     private framePath;
     private rolePath;
+    private invitePath;
     private keyPath;
 }
 //# sourceMappingURL=store.d.ts.map

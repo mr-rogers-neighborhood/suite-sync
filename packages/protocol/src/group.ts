@@ -277,6 +277,24 @@ export async function exportKey(
   );
 }
 
+/**
+ * A key package on the wire, and back.
+ *
+ * This is the one thing a device with no role may send. It is public by design: the host
+ * carries it to an owner, who is the only party that can turn it into membership.
+ */
+export function encodeKeyPackageBytes(keyPackage: KeyPackage): Uint8Array {
+  return encodeMlsMessage({ version: "mls10", wireformat: "mls_key_package", keyPackage });
+}
+
+export function decodeKeyPackageBytes(bytes: Uint8Array): KeyPackage {
+  const decoded = decodeMlsMessage(bytes, 0);
+  if (decoded === undefined || decoded[0].wireformat !== "mls_key_package") {
+    throw new Error("that is not a key package");
+  }
+  return decoded[0].keyPackage;
+}
+
 /** Persistable bytes. Losing these is losing the ability to read the workspace. */
 export function encodeGroup(group: DeviceGroup): Uint8Array {
   return encodeGroupState(group.state);

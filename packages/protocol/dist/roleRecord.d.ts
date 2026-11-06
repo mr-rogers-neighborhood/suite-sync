@@ -32,8 +32,8 @@ export interface RoleState {
 export declare const roleRejectionSchema: z.ZodEnum<{
     "wrong-workspace": "wrong-workspace";
     "invalid-signature": "invalid-signature";
-    "wrong-seq": "wrong-seq";
     "not-owner": "not-owner";
+    "wrong-seq": "wrong-seq";
     "last-owner": "last-owner";
     "role-unchanged": "role-unchanged";
 }>;

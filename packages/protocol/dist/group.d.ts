@@ -86,6 +86,14 @@ export declare function open(group: DeviceGroup, message: Uint8Array): Promise<O
  * the group does, which is the point.
  */
 export declare function exportKey(group: DeviceGroup, label: string, workspaceId: string, length?: number): Promise<Uint8Array>;
+/**
+ * A key package on the wire, and back.
+ *
+ * This is the one thing a device with no role may send. It is public by design: the host
+ * carries it to an owner, who is the only party that can turn it into membership.
+ */
+export declare function encodeKeyPackageBytes(keyPackage: KeyPackage): Uint8Array;
+export declare function decodeKeyPackageBytes(bytes: Uint8Array): KeyPackage;
 /** Persistable bytes. Losing these is losing the ability to read the workspace. */
 export declare function encodeGroup(group: DeviceGroup): Uint8Array;
 /**

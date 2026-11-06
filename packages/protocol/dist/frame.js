@@ -10,7 +10,7 @@ import { deviceIdSchema, workspaceIdSchema } from "./ids.js";
  * A frame is signed by the device that sent it, so a reader can attribute a change
  * without trusting the host's ordering.
  */
-export const frameKindSchema = z.enum(["commit", "welcome", "application"]);
+export const frameKindSchema = z.enum(["keypackage", "commit", "welcome", "application"]);
 export const frameHeaderSchema = z
     .object({
     kind: frameKindSchema,

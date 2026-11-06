@@ -14,6 +14,38 @@ export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObj
     deviceId: z.ZodString;
     publicKey: z.ZodString;
 }, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"invite">;
+    record: z.ZodObject<{
+        workspaceId: z.ZodString;
+        inviteId: z.ZodString;
+        role: z.ZodEnum<{
+            owner: "owner";
+            editor: "editor";
+            viewer: "viewer";
+        }>;
+        expiresAt: z.ZodString;
+        signerId: z.ZodString;
+        signature: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"keypackage">;
+    inviteId: z.ZodString;
+    deviceId: z.ZodString;
+    publicKey: z.ZodString;
+    frame: z.ZodObject<{
+        kind: z.ZodEnum<{
+            keypackage: "keypackage";
+            commit: "commit";
+            welcome: "welcome";
+            application: "application";
+        }>;
+        workspaceId: z.ZodString;
+        deviceId: z.ZodString;
+        epoch: z.ZodNumber;
+        payload: z.ZodString;
+        signature: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"role">;
     record: z.ZodObject<{
         workspaceId: z.ZodString;
@@ -31,6 +63,7 @@ export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObj
     type: z.ZodLiteral<"frame">;
     frame: z.ZodObject<{
         kind: z.ZodEnum<{
+            keypackage: "keypackage";
             commit: "commit";
             welcome: "welcome";
             application: "application";
@@ -59,6 +92,7 @@ declare const frameOutSchema: z.ZodObject<{
     index: z.ZodNumber;
     frame: z.ZodObject<{
         kind: z.ZodEnum<{
+            keypackage: "keypackage";
             commit: "commit";
             welcome: "welcome";
             application: "application";
@@ -110,10 +144,14 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
     }>;
     seq: z.ZodNumber;
 }, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"invited">;
+    inviteId: z.ZodString;
+}, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"frame">;
     index: z.ZodNumber;
     frame: z.ZodObject<{
         kind: z.ZodEnum<{
+            keypackage: "keypackage";
             commit: "commit";
             welcome: "welcome";
             application: "application";
@@ -135,10 +173,17 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
     }>, z.ZodEnum<{
         "wrong-workspace": "wrong-workspace";
         "invalid-signature": "invalid-signature";
-        "wrong-seq": "wrong-seq";
         "not-owner": "not-owner";
+        "wrong-seq": "wrong-seq";
         "last-owner": "last-owner";
         "role-unchanged": "role-unchanged";
+    }>, z.ZodEnum<{
+        "wrong-workspace": "wrong-workspace";
+        "invalid-signature": "invalid-signature";
+        "not-owner": "not-owner";
+        expired: "expired";
+        "unknown-invite": "unknown-invite";
+        "invite-spent": "invite-spent";
     }>]>;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"error">;

@@ -1,8 +1,9 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { frameSchema, roleRecordSchema } from "@suite/sync";
+import { frameSchema, inviteRecordSchema, roleRecordSchema, } from "@suite/sync";
 export class MemoryHostStore {
     frames = new Map();
+    invites = new Map();
     roles = new Map();
     keys = new Map();
     async loadFrames(workspaceId) {
@@ -20,6 +21,14 @@ export class MemoryHostStore {
         const existing = this.roles.get(workspaceId) ?? [];
         existing.push(record);
         this.roles.set(workspaceId, existing);
+    }
+    async loadInvites(workspaceId) {
+        return [...(this.invites.get(workspaceId) ?? [])];
+    }
+    async appendInvite(workspaceId, record) {
+        const existing = this.invites.get(workspaceId) ?? [];
+        existing.push(record);
+        this.invites.set(workspaceId, existing);
     }
     async loadKeys(workspaceId) {
         return [...(this.keys.get(workspaceId) ?? [])];
@@ -58,6 +67,12 @@ export class FileHostStore {
     async appendRole(workspaceId, record) {
         await this.appendLine(this.rolePath(workspaceId), record);
     }
+    async loadInvites(workspaceId) {
+        return readLines(this.invitePath(workspaceId), (value) => inviteRecordSchema.safeParse(value).data);
+    }
+    async appendInvite(workspaceId, record) {
+        await this.appendLine(this.invitePath(workspaceId), record);
+    }
     async loadKeys(workspaceId) {
         return readLines(this.keyPath(workspaceId), (value) => pinnedKey(value));
     }
@@ -81,6 +96,9 @@ export class FileHostStore {
     }
     rolePath(workspaceId) {
         return join(this.directory, `${workspaceId}.roles.jsonl`);
+    }
+    invitePath(workspaceId) {
+        return join(this.directory, `${workspaceId}.invites.jsonl`);
     }
     keyPath(workspaceId) {
         return join(this.directory, `${workspaceId}.keys.jsonl`);

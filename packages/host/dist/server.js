@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { applyRoleRecord, createRoleState, encodeRelayMessage, isRelayCompatible, parseClientMessage, RELAY_PROTOCOL_VERSION, } from "@suite/sync";
+import { addInvite, applyRoleRecord, createInviteState, createRoleState, encodeRelayMessage, isRelayCompatible, liveInvite, parseClientMessage, RELAY_PROTOCOL_VERSION, spendInvite, } from "@suite/sync";
 import { WebSocket, WebSocketServer } from "ws";
 import { admitFrame, FrameLog } from "./blindRoom.js";
 import { FileHostStore } from "./store.js";
@@ -61,6 +61,7 @@ export async function createSyncServer(options) {
                 workspaceId,
                 log: new FrameLog(workspaceId),
                 roles: createRoleState(workspaceId),
+                invites: createInviteState(workspaceId),
                 keys: new Map(),
                 sockets: new Set(),
             };
@@ -115,6 +116,12 @@ export async function createSyncServer(options) {
             return;
         }
         switch (message.type) {
+            case "invite":
+                await handleInvite(socket, context, message.record);
+                return;
+            case "keypackage":
+                await handleKeyPackage(socket, context, message);
+                return;
             case "role":
                 await handleRole(socket, context, message.record);
                 return;
@@ -161,6 +168,67 @@ export async function createSyncServer(options) {
             newestEpoch: room.log.newestEpoch,
             frames: room.log.length,
         });
+    }
+    /**
+     * Keep an invite an owner wrote.
+     *
+     * The host cannot tell who it is for — an invite is a bearer token — and that is the
+     * point: the owner decides who gets in, the host only decides whether the token is real
+     * and unspent.
+     */
+    async function handleInvite(socket, context, record) {
+        const added = addInvite(context.room.invites, record, roleVerifierFor(context.room), (deviceId) => context.room.roles.roles[deviceId] === "owner", now());
+        if (!added.ok) {
+            send(socket, { type: "refused", reason: added.reason });
+            return;
+        }
+        context.room.invites = added.state;
+        await store.appendInvite(context.room.workspaceId, record);
+        send(socket, { type: "invited", inviteId: record.inviteId });
+    }
+    /**
+     * The one exception to "a device with no role may not post".
+     *
+     * A key package is how a device asks to join, and it is what an owner needs in order to
+     * let it in, so refusing it would make joining impossible. A live invite is what makes
+     * the exception safe: one invite, one key package, and then it is spent.
+     */
+    async function handleKeyPackage(socket, context, message) {
+        const live = liveInvite(context.room.invites, message.inviteId, now());
+        if (!live.ok) {
+            send(socket, { type: "refused", reason: live.reason });
+            return;
+        }
+        const pinned = context.room.keys.get(message.deviceId);
+        if (pinned !== undefined && pinned !== message.publicKey) {
+            sendError(socket, "unknown", "that device id is already pinned to another key");
+            return;
+        }
+        if (pinned === undefined) {
+            context.room.keys.set(message.deviceId, message.publicKey);
+            await store.appendKey(context.room.workspaceId, {
+                deviceId: message.deviceId,
+                publicKey: message.publicKey,
+            });
+        }
+        const verdict = admitFrame(message.frame, { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch }, context.room.roles, (deviceId) => context.room.keys.get(deviceId) ?? null, options.verifyFrame, now().toISOString(), 
+        // The invite is the authorisation, not a role record: this device has no role yet.
+        { kindAllowedWithoutRole: "keypackage" });
+        if (!verdict.ok) {
+            send(socket, { type: "refused", reason: verdict.reason });
+            return;
+        }
+        context.room.invites = spendInvite(context.room.invites, message.inviteId);
+        await store.appendInvite(context.room.workspaceId, live.record);
+        const index = context.room.log.length;
+        context.room.log.append(verdict.frame);
+        await store.appendFrame(context.room.workspaceId, verdict.frame);
+        const relayed = { type: "frame", index, frame: verdict.frame };
+        send(socket, relayed);
+        for (const peer of context.room.sockets) {
+            if (peer !== socket)
+                send(peer, relayed);
+        }
     }
     async function handleRole(socket, context, record) {
         const applied = applyRoleRecord(context.room.roles, record, roleVerifierFor(context.room));

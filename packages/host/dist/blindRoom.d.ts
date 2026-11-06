@@ -1,4 +1,4 @@
-import { type Frame, type FrameRejection, type RoleState, type SealedFrame } from "@suite/sync";
+import { type Frame, type FrameKind, type FrameRejection, type RoleState, type SealedFrame } from "@suite/sync";
 /**
  * What a host is allowed to decide, and the only things it is allowed to decide.
  *
@@ -32,7 +32,16 @@ export interface HostWorkspace {
  * record is next, and the signature is last because it is the most expensive. A frame
  * is only stored when all four agree.
  */
-export declare function admitFrame(sealed: SealedFrame, host: HostWorkspace, roles: RoleState, keyOf: (deviceId: string) => string | null, verify: FrameVerifier, receivedAt?: string): HostVerdict;
+export interface AdmitOptions {
+    /**
+     * A frame kind that may come from a device with no role.
+     *
+     * There is exactly one caller: a key package, which is how a device asks to join. A live
+     * invite is what makes it safe, and the invite is checked before this is reached.
+     */
+    readonly kindAllowedWithoutRole?: FrameKind;
+}
+export declare function admitFrame(sealed: SealedFrame, host: HostWorkspace, roles: RoleState, keyOf: (deviceId: string) => string | null, verify: FrameVerifier, receivedAt?: string, admitOptions?: AdmitOptions): HostVerdict;
 /**
  * The frames one workspace has, oldest first.
  *

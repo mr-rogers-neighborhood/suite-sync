@@ -1,5 +1,6 @@
 import {
   type Frame,
+  type FrameKind,
   type FrameRejection,
   framePayload,
   hostAcceptsEpoch,
@@ -41,6 +42,16 @@ export interface HostWorkspace {
  * record is next, and the signature is last because it is the most expensive. A frame
  * is only stored when all four agree.
  */
+export interface AdmitOptions {
+  /**
+   * A frame kind that may come from a device with no role.
+   *
+   * There is exactly one caller: a key package, which is how a device asks to join. A live
+   * invite is what makes it safe, and the invite is checked before this is reached.
+   */
+  readonly kindAllowedWithoutRole?: FrameKind;
+}
+
 export function admitFrame(
   sealed: SealedFrame,
   host: HostWorkspace,
@@ -48,13 +59,15 @@ export function admitFrame(
   keyOf: (deviceId: string) => string | null,
   verify: FrameVerifier,
   receivedAt: string = new Date().toISOString(),
+  admitOptions: AdmitOptions = {},
 ): HostVerdict {
   if (sealed.workspaceId !== host.workspaceId) return { ok: false, reason: "wrong-workspace" };
 
   if (!hostAcceptsEpoch(sealed.epoch, host.newestEpoch))
     return { ok: false, reason: "stale-epoch" };
 
-  if (!mayWrite(roles, sealed.deviceId)) return { ok: false, reason: "not-authorized" };
+  const invited = admitOptions.kindAllowedWithoutRole === sealed.kind;
+  if (!invited && !mayWrite(roles, sealed.deviceId)) return { ok: false, reason: "not-authorized" };
 
   const publicKey = keyOf(sealed.deviceId);
   if (publicKey === null || !verify(framePayload(sealed), sealed.signature, publicKey)) {

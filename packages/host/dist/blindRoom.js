@@ -1,17 +1,11 @@
 import { framePayload, hostAcceptsEpoch, mayWrite, } from "@suite/sync";
-/**
- * Decide whether to store one frame.
- *
- * The order matters: the workspace and the epoch are cheap and unambiguous, the role
- * record is next, and the signature is last because it is the most expensive. A frame
- * is only stored when all four agree.
- */
-export function admitFrame(sealed, host, roles, keyOf, verify, receivedAt = new Date().toISOString()) {
+export function admitFrame(sealed, host, roles, keyOf, verify, receivedAt = new Date().toISOString(), admitOptions = {}) {
     if (sealed.workspaceId !== host.workspaceId)
         return { ok: false, reason: "wrong-workspace" };
     if (!hostAcceptsEpoch(sealed.epoch, host.newestEpoch))
         return { ok: false, reason: "stale-epoch" };
-    if (!mayWrite(roles, sealed.deviceId))
+    const invited = admitOptions.kindAllowedWithoutRole === sealed.kind;
+    if (!invited && !mayWrite(roles, sealed.deviceId))
         return { ok: false, reason: "not-authorized" };
     const publicKey = keyOf(sealed.deviceId);
     if (publicKey === null || !verify(framePayload(sealed), sealed.signature, publicKey)) {

@@ -143,6 +143,22 @@ export async function exportKey(group, label, workspaceId, length = 32) {
     const cs = await cipherSuite();
     return mlsExporter(group.state.keySchedule.exporterSecret, label, new TextEncoder().encode(workspaceId), length, cs);
 }
+/**
+ * A key package on the wire, and back.
+ *
+ * This is the one thing a device with no role may send. It is public by design: the host
+ * carries it to an owner, who is the only party that can turn it into membership.
+ */
+export function encodeKeyPackageBytes(keyPackage) {
+    return encodeMlsMessage({ version: "mls10", wireformat: "mls_key_package", keyPackage });
+}
+export function decodeKeyPackageBytes(bytes) {
+    const decoded = decodeMlsMessage(bytes, 0);
+    if (decoded === undefined || decoded[0].wireformat !== "mls_key_package") {
+        throw new Error("that is not a key package");
+    }
+    return decoded[0].keyPackage;
+}
 /** Persistable bytes. Losing these is losing the ability to read the workspace. */
 export function encodeGroup(group) {
     return encodeGroupState(group.state);

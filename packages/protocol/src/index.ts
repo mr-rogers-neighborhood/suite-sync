@@ -23,7 +23,9 @@ export {
   type DeviceGroup,
   type DeviceIdentity,
   decodeGroup,
+  decodeKeyPackageBytes,
   encodeGroup,
+  encodeKeyPackageBytes,
   exportKey,
   joinWorkspaceGroup,
   leafIndexOf,
@@ -49,6 +51,21 @@ export {
   type WorkspaceId,
   workspaceIdSchema,
 } from "./ids.js";
+export {
+  addInvite,
+  createInviteState,
+  type InviteRecord,
+  type InviteRejection,
+  type InviteResult,
+  type InviteState,
+  type InviteVerifier,
+  invitedRole,
+  inviteRecordPayload,
+  inviteRecordSchema,
+  inviteRejectionSchema,
+  liveInvite,
+  spendInvite,
+} from "./invite.js";
 export {
   encodeRelayMessage,
   isRelayCompatible,
