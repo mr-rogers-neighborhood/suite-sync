@@ -8,3 +8,6 @@ coverage/
 # git subdependency's build scripts without an allowlist keyed by the resolved
 # commit. So the package `dist` ships; `pnpm check` rebuilds and fails on drift.
 !packages/*/dist/
+
+# The host store a local `serve` writes.
+.suite-sync/
