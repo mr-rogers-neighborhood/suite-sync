@@ -40,6 +40,7 @@ function client(fake: ReturnType<typeof fakeSocket>, overrides: Partial<{ url: s
       workspaceId,
       deviceId,
       publicKey: "a2V5",
+      name: "a test device",
       sign: () => "signed",
       webSocket: () => fake.socket,
     },
