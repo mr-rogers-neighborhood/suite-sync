@@ -1,8 +1,14 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
-import { SYNC_PROTOCOL_VERSION } from "@suite/sync";
+import { type MemberRole, SYNC_PROTOCOL_VERSION } from "@suite/sync";
 import { createSyncServer, RoomRegistry } from "./server.js";
 import { loadWorkspace } from "./workspace.js";
+import {
+  addWorkspaceMember,
+  formatWorkspaceSummary,
+  initWorkspace,
+  showWorkspace,
+} from "./workspaceCli.js";
 
 export const SERVER_NAME = "suite-sync";
 export const SERVER_VERSION = "0.1.0";
@@ -31,6 +37,11 @@ Usage:
   suite-sync --version                              print the server and protocol versions
   suite-sync status                                 report whether a workspace is configured
   suite-sync serve [--host <host>] [--port <port>] [--workspace <dir>]...
+
+  suite-sync workspace init <dir> [--from-canvas <file>] [--workspace <id>]
+      [--owner <id>] [--editor <id>] [--force]
+  suite-sync workspace show <dir>
+  suite-sync workspace add-member <dir> --member <id> --role editor|viewer [--name <name>]
 
 A workspace directory holds \`membership.json\` and an optional \`snapshot.loro\`.
 The server starts with no workspaces when none are named.
@@ -65,10 +76,11 @@ export function runCli(argv: readonly string[]): CliResult {
         stderr: "",
       };
     case "serve":
+    case "workspace":
       return {
         code: 1,
         stdout: "",
-        stderr: "serve must be run by the suite-sync binary\n",
+        stderr: `${command} must be run by the suite-sync binary\n`,
       };
     default:
       return {
@@ -153,6 +165,80 @@ export async function serve(options: ServeOptions): Promise<void> {
   });
 }
 
+export async function runWorkspaceCommand(argv: readonly string[]): Promise<CliResult> {
+  const [subcommand, directory, ...rest] = argv;
+
+  try {
+    if (subcommand === "init") {
+      if (directory === undefined || directory.startsWith("--")) {
+        return { code: 1, stdout: "", stderr: "workspace init needs a directory\n" };
+      }
+      const fromCanvas = flagValue(rest, "--from-canvas");
+      const workspaceId = flagValue(rest, "--workspace");
+      const ownerId = flagValue(rest, "--owner");
+      const editorId = flagValue(rest, "--editor");
+      const summary = await initWorkspace({
+        directory,
+        ...(fromCanvas === undefined ? {} : { fromCanvas }),
+        ...(workspaceId === undefined ? {} : { workspaceId }),
+        ...(ownerId === undefined ? {} : { ownerId }),
+        ...(editorId === undefined ? {} : { editorId }),
+        force: rest.includes("--force"),
+      });
+      return { code: 0, stdout: formatWorkspaceSummary(summary), stderr: "" };
+    }
+
+    if (subcommand === "show") {
+      if (directory === undefined || directory.startsWith("--")) {
+        return { code: 1, stdout: "", stderr: "workspace show needs a directory\n" };
+      }
+      return {
+        code: 0,
+        stdout: formatWorkspaceSummary(await showWorkspace(directory)),
+        stderr: "",
+      };
+    }
+
+    if (subcommand === "add-member") {
+      if (directory === undefined || directory.startsWith("--")) {
+        return { code: 1, stdout: "", stderr: "workspace add-member needs a directory\n" };
+      }
+      const memberId = flagValue(rest, "--member");
+      const role = flagValue(rest, "--role");
+      if (memberId === undefined) {
+        return { code: 1, stdout: "", stderr: "--member is required\n" };
+      }
+      if (role !== "editor" && role !== "viewer") {
+        return { code: 1, stdout: "", stderr: "--role must be editor or viewer\n" };
+      }
+      const summary = await addWorkspaceMember(directory, {
+        memberId,
+        role: role as MemberRole,
+        displayName: flagValue(rest, "--name") ?? "Member",
+      });
+      return { code: 0, stdout: formatWorkspaceSummary(summary), stderr: "" };
+    }
+
+    return {
+      code: 1,
+      stdout: "",
+      stderr: "workspace needs init, show or add-member\n",
+    };
+  } catch (error) {
+    return {
+      code: 1,
+      stdout: "",
+      stderr: `${error instanceof Error ? error.message : String(error)}\n`,
+    };
+  }
+}
+
+function flagValue(argv: readonly string[], name: string): string | undefined {
+  const index = argv.indexOf(name);
+  if (index < 0) return undefined;
+  return argv[index + 1];
+}
+
 const entry = process.argv[1];
 const isMain = entry !== undefined && import.meta.url === pathToFileURL(entry).href;
 
@@ -172,6 +258,11 @@ if (isMain) {
         process.exitCode = 1;
       }
     }
+  } else if (command === "workspace") {
+    const result = await runWorkspaceCommand(process.argv.slice(3));
+    if (result.stdout.length > 0) process.stdout.write(result.stdout);
+    if (result.stderr.length > 0) process.stderr.write(result.stderr);
+    process.exitCode = result.code;
   } else {
     const result = runCli(process.argv.slice(2));
     if (result.stdout.length > 0) process.stdout.write(result.stdout);
