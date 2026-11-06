@@ -86,6 +86,8 @@ export {
   type RelayFrame,
   type RelayHostMessage,
   type RelayJoined,
+  type RelayMember,
+  type RelayWaiting,
   relayClientMessageSchema,
   relayErrorCodeSchema,
   relayHostMessageSchema,

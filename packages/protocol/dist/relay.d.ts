@@ -6,7 +6,7 @@ import { z } from "zod";
  * client has not seen. Nothing in this protocol asks it to understand a document, and
  * nothing lets it answer a question about one.
  */
-export declare const RELAY_PROTOCOL_VERSION = 1;
+export declare const RELAY_PROTOCOL_VERSION = 2;
 export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     type: z.ZodLiteral<"join">;
     protocolVersion: z.ZodNumber;
@@ -81,12 +81,38 @@ export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObj
     after: z.ZodNumber;
 }, z.core.$strict>], "type">;
 export type RelayClientMessage = z.infer<typeof relayClientMessageSchema>;
+/**
+ * One device the host will accept a frame from, as the host already knows it: the name it
+ * gave on the way in and the role it was granted.
+ *
+ * The host is not reading anything to produce this. It admits frames by role and pins a key
+ * per device, so it holds exactly these three fields and is telling members what it must
+ * already know to do its job.
+ */
+declare const memberSchema: z.ZodObject<{
+    deviceId: z.ZodString;
+    name: z.ZodString;
+    role: z.ZodEnum<{
+        owner: "owner";
+        editor: "editor";
+        viewer: "viewer";
+    }>;
+}, z.core.$strict>;
 declare const joinedSchema: z.ZodObject<{
     type: z.ZodLiteral<"joined">;
     protocolVersion: z.ZodNumber;
     workspaceId: z.ZodString;
     newestEpoch: z.ZodNullable<z.ZodNumber>;
     frames: z.ZodNumber;
+    members: z.ZodArray<z.ZodObject<{
+        deviceId: z.ZodString;
+        name: z.ZodString;
+        role: z.ZodEnum<{
+            owner: "owner";
+            editor: "editor";
+            viewer: "viewer";
+        }>;
+    }, z.core.$strict>>;
 }, z.core.$strict>;
 /** A frame with its position, so a client can ask for what comes after it. */
 declare const frameOutSchema: z.ZodObject<{
@@ -123,6 +149,25 @@ declare const appliedSchema: z.ZodObject<{
     }>;
     seq: z.ZodNumber;
 }, z.core.$strict>;
+/**
+ * A device is waiting to be let in, and this is the invitation it spent.
+ *
+ * An owner has to write the joiner's role record, and the role was decided by whoever wrote
+ * the invitation — which need not be the device doing the admitting, so it cannot be looked
+ * up locally. The host read the invitation to decide whether to honour it, so it is the one
+ * party that can answer. The invitation is already spent by the time this is sent.
+ */
+declare const waitingSchema: z.ZodObject<{
+    type: z.ZodLiteral<"waiting">;
+    deviceId: z.ZodString;
+    name: z.ZodString;
+    inviteId: z.ZodString;
+    role: z.ZodEnum<{
+        owner: "owner";
+        editor: "editor";
+        viewer: "viewer";
+    }>;
+}, z.core.$strict>;
 export declare const relayErrorCodeSchema: z.ZodEnum<{
     unknown: "unknown";
     "protocol-version": "protocol-version";
@@ -136,6 +181,15 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
     workspaceId: z.ZodString;
     newestEpoch: z.ZodNullable<z.ZodNumber>;
     frames: z.ZodNumber;
+    members: z.ZodArray<z.ZodObject<{
+        deviceId: z.ZodString;
+        name: z.ZodString;
+        role: z.ZodEnum<{
+            owner: "owner";
+            editor: "editor";
+            viewer: "viewer";
+        }>;
+    }, z.core.$strict>>;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"applied">;
     deviceId: z.ZodString;
@@ -148,6 +202,16 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"invited">;
     inviteId: z.ZodString;
+}, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"waiting">;
+    deviceId: z.ZodString;
+    name: z.ZodString;
+    inviteId: z.ZodString;
+    role: z.ZodEnum<{
+        owner: "owner";
+        editor: "editor";
+        viewer: "viewer";
+    }>;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"frame">;
     index: z.ZodNumber;
@@ -200,6 +264,8 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
 export type RelayHostMessage = z.infer<typeof relayHostMessageSchema>;
 export type RelayJoined = z.infer<typeof joinedSchema>;
 export type RelayApplied = z.infer<typeof appliedSchema>;
+export type RelayWaiting = z.infer<typeof waitingSchema>;
+export type RelayMember = z.infer<typeof memberSchema>;
 export type RelayFrame = z.infer<typeof frameOutSchema>;
 export declare function encodeRelayMessage(message: RelayClientMessage | RelayHostMessage): string;
 export declare function parseClientMessage(value: unknown): RelayClientMessage | null;

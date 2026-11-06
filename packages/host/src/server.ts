@@ -12,6 +12,7 @@ import {
   parseClientMessage,
   RELAY_PROTOCOL_VERSION,
   type RelayClientMessage,
+  type RelayMember,
   type RoleRecord,
   type RoleState,
   type RoleVerifier,
@@ -258,7 +259,25 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       workspaceId: room.workspaceId,
       newestEpoch: room.log.newestEpoch,
       frames: room.log.length,
+      members: rosterOf(room),
     });
+  }
+
+  /**
+   * Who the host will accept a frame from, and what each of them may do.
+   *
+   * A device with a pinned key but no role is waiting to be let in rather than here, so the
+   * roster is built from roles and named from pins. Nothing is read to produce it: these are
+   * the two tables the host keeps in order to admit anything at all.
+   */
+  function rosterOf(room: HostedRoom): RelayMember[] {
+    return Object.entries(room.roles.roles)
+      .map(([deviceId, role]) => ({
+        deviceId,
+        role,
+        name: room.keys.get(deviceId)?.name ?? "A device",
+      }))
+      .sort((left, right) => left.deviceId.localeCompare(right.deviceId));
   }
 
   /**
@@ -349,6 +368,21 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     send(socket, relayed);
     for (const peer of context.room.sockets) {
       if (peer !== socket) send(peer, relayed);
+    }
+
+    // The invitation decided who this device is and what it may do, and the person adding it
+    // cannot ask: the invitation may have been written by somebody else. The host read it to
+    // decide whether to honour it, so it is the only party that can answer — and the token is
+    // spent by now, so there is nothing left to leak.
+    const waiting = {
+      type: "waiting" as const,
+      deviceId: message.deviceId,
+      name: message.name,
+      inviteId: live.record.inviteId,
+      role: live.record.role,
+    };
+    for (const peer of context.room.sockets) {
+      if (peer !== socket) send(peer, waiting);
     }
   }
 

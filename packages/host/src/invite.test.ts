@@ -108,11 +108,14 @@ async function started() {
   return { server, store, alice };
 }
 
-function inviteRecord(expiresAt = "2026-11-07T12:00:00.000Z") {
+function inviteRecord(
+  expiresAt = "2026-11-07T12:00:00.000Z",
+  role: "editor" | "viewer" = "editor",
+) {
   const unsigned = {
     workspaceId,
     inviteId,
-    role: "editor" as const,
+    role,
     expiresAt,
     signerId: owner.deviceId,
   };
@@ -179,6 +182,43 @@ describe("an invited device may ask to join", () => {
 
     bob.close();
     second.close();
+    alice.close();
+    await server.close();
+  });
+
+  it("tells the person adding a device which invitation it spent, and in what role", async () => {
+    const { server, alice } = await started();
+    // A viewer invitation, because the role the person chose is the one that must come back:
+    // whoever adds the device cannot look it up, since the invitation need not be theirs.
+    alice.send({ type: "invite", record: inviteRecord(undefined, "viewer") });
+    await alice.until((m) => m.type === "invited");
+
+    const bob = await Client.connect(server.url);
+    bob.send({
+      type: "join",
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      workspaceId,
+      deviceId: stranger.deviceId,
+      publicKey: stranger.publicKey,
+      name: "a test device",
+    });
+    await bob.until((m) => m.type === "joined");
+    bob.send(await keyPackageMessage(stranger));
+
+    const waiting = await alice.until((m) => m.type === "waiting");
+    expect(waiting).toEqual({
+      type: "waiting",
+      deviceId: stranger.deviceId,
+      name: "a test device",
+      inviteId,
+      role: "viewer",
+    });
+
+    // The device asking hears nothing about itself: it is the answer to somebody else's
+    // question, and a second copy on the same screen would be a second thing to explain.
+    expect(bob.messages.some((m) => m.type === "waiting")).toBe(false);
+
+    bob.close();
     alice.close();
     await server.close();
   });

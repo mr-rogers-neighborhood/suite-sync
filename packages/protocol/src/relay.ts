@@ -3,6 +3,7 @@ import { frameRejectionSchema, frameSchema, sealedFrameSchema } from "./frame.js
 import { deviceIdSchema, workspaceIdSchema } from "./ids.js";
 import { inviteRecordSchema, inviteRejectionSchema } from "./invite.js";
 import { roleRecordSchema, roleRejectionSchema } from "./roleRecord.js";
+import { memberRoleSchema } from "./roles.js";
 
 /**
  * What a host and a client say to each other.
@@ -11,7 +12,7 @@ import { roleRecordSchema, roleRejectionSchema } from "./roleRecord.js";
  * client has not seen. Nothing in this protocol asks it to understand a document, and
  * nothing lets it answer a question about one.
  */
-export const RELAY_PROTOCOL_VERSION = 1;
+export const RELAY_PROTOCOL_VERSION = 2;
 
 /**
  * A client announces itself.
@@ -82,6 +83,22 @@ export const relayClientMessageSchema = z.discriminatedUnion("type", [
 
 export type RelayClientMessage = z.infer<typeof relayClientMessageSchema>;
 
+/**
+ * One device the host will accept a frame from, as the host already knows it: the name it
+ * gave on the way in and the role it was granted.
+ *
+ * The host is not reading anything to produce this. It admits frames by role and pins a key
+ * per device, so it holds exactly these three fields and is telling members what it must
+ * already know to do its job.
+ */
+const memberSchema = z
+  .object({
+    deviceId: deviceIdSchema,
+    name: z.string().min(1).max(80),
+    role: memberRoleSchema,
+  })
+  .strict();
+
 const joinedSchema = z
   .object({
     type: z.literal("joined"),
@@ -91,6 +108,14 @@ const joinedSchema = z
     newestEpoch: z.number().int().nonnegative().nullable(),
     /** How many frames it holds, so a client knows whether to ask for a catch-up. */
     frames: z.number().int().nonnegative(),
+    /**
+     * Who is in the workspace and what each of them may do.
+     *
+     * A device is told who its neighbours are, because every decision a person is asked to
+     * make here — hand this on, remove that one — is a decision about a named device. The
+     * exchange is metadata only: not one byte of anyone's document is involved.
+     */
+    members: z.array(memberSchema),
   })
   .strict();
 
@@ -123,6 +148,24 @@ const invitedSchema = z
   .object({ type: z.literal("invited"), inviteId: z.string().min(1) })
   .strict();
 
+/**
+ * A device is waiting to be let in, and this is the invitation it spent.
+ *
+ * An owner has to write the joiner's role record, and the role was decided by whoever wrote
+ * the invitation — which need not be the device doing the admitting, so it cannot be looked
+ * up locally. The host read the invitation to decide whether to honour it, so it is the one
+ * party that can answer. The invitation is already spent by the time this is sent.
+ */
+const waitingSchema = z
+  .object({
+    type: z.literal("waiting"),
+    deviceId: deviceIdSchema,
+    name: z.string().min(1).max(80),
+    inviteId: z.string().min(1),
+    role: memberRoleSchema,
+  })
+  .strict();
+
 const refusedSchema = z
   .object({
     type: z.literal("refused"),
@@ -152,6 +195,7 @@ export const relayHostMessageSchema = z.discriminatedUnion("type", [
   joinedSchema,
   appliedSchema,
   invitedSchema,
+  waitingSchema,
   frameOutSchema,
   refusedSchema,
   errorSchema,
@@ -160,6 +204,8 @@ export const relayHostMessageSchema = z.discriminatedUnion("type", [
 export type RelayHostMessage = z.infer<typeof relayHostMessageSchema>;
 export type RelayJoined = z.infer<typeof joinedSchema>;
 export type RelayApplied = z.infer<typeof appliedSchema>;
+export type RelayWaiting = z.infer<typeof waitingSchema>;
+export type RelayMember = z.infer<typeof memberSchema>;
 export type RelayFrame = z.infer<typeof frameOutSchema>;
 
 export function encodeRelayMessage(message: RelayClientMessage | RelayHostMessage): string {

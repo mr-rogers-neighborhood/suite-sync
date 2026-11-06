@@ -51,6 +51,9 @@ function dispatch(message, handlers) {
             return;
         case "applied":
             return;
+        case "waiting":
+            handlers.onWaiting(message);
+            return;
         case "frame":
             handlers.onFrame(message.index, message.frame);
             return;

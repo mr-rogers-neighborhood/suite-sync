@@ -30,6 +30,7 @@ function client(fake: ReturnType<typeof fakeSocket>, overrides: Partial<{ url: s
   const events = {
     joined: [] as unknown[],
     frames: [] as Array<[number, string]>,
+    waiting: [] as unknown[],
     refused: [] as string[],
     errors: [] as string[],
     closed: 0,
@@ -47,6 +48,7 @@ function client(fake: ReturnType<typeof fakeSocket>, overrides: Partial<{ url: s
     {
       onJoined: (info) => events.joined.push(info),
       onFrame: (index, frame) => events.frames.push([index, frame.kind]),
+      onWaiting: (waiting) => events.waiting.push(waiting),
       onRefused: (reason) => events.refused.push(reason),
       onError: (code) => events.errors.push(code),
       onClosed: () => {

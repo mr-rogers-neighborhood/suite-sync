@@ -202,6 +202,29 @@ describe("two devices through one host", () => {
     await server.close();
   });
 
+  it("tells a device who else is in the workspace, and what each may do", async () => {
+    const { server } = await started();
+    const alice = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    await alice.until((m) => m.type === "applied");
+
+    const bob = await RelayClient.connect(server.url);
+    await joined(bob, second);
+
+    // A device that joins is told who its neighbours are, because every decision a person is
+    // asked to make here is a decision about a named device. A device with a pinned key but no
+    // role is waiting to be let in rather than here, so it is not on the list.
+    const greeting = bob.messages.find((message) => message.type === "joined");
+    expect(greeting).toMatchObject({
+      members: [{ deviceId: owner.deviceId, name: "a test device", role: "owner" }],
+    });
+
+    alice.close();
+    bob.close();
+    await server.close();
+  });
+
   it("hands a returning device only what it has not seen", async () => {
     const { server } = await started();
     const alice = await RelayClient.connect(server.url);
