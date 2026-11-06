@@ -1,6 +1,6 @@
 {
   "name": "@suite/sync",
-  "version": "0.3.1",
+  "version": "0.3.4",
   "description": "The Suite sync protocol: workspace, device and member identity, signed membership, version vectors and wire messages. The root entry is pure TypeScript with no Loro; ./loro is the Loro document and WebSocket client half.",
   "type": "module",
   "main": "./dist/index.js",
