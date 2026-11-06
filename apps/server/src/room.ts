@@ -9,7 +9,7 @@ import {
   roleOf,
   type VersionVector,
 } from "@suite/sync";
-import { LoroSyncPeer } from "@suite/sync-client";
+import { LoroSyncPeer } from "@suite/sync/loro";
 
 export type RoomRejection =
   | "not-member"

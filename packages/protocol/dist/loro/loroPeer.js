@@ -1,5 +1,5 @@
-import { coversVersionVector, diffVersionVector, isVersionVectorEmpty, } from "@suite/sync";
 import { LoroDoc, VersionVector as LoroVersionVector } from "loro-crdt";
+import { coversVersionVector, diffVersionVector, isVersionVectorEmpty, } from "../sync.js";
 /**
  * A Loro document behind the sync protocol.
  *

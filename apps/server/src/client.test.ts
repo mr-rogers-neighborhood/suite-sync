@@ -6,7 +6,7 @@ import {
   type MembershipState,
   membershipEntryPayload,
 } from "@suite/sync";
-import { LoroSyncPeer, SuiteSyncClient, type WebSocketConstructor } from "@suite/sync-client";
+import { LoroSyncPeer, SuiteSyncClient, type WebSocketConstructor } from "@suite/sync/loro";
 import { LoroDoc } from "loro-crdt";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";

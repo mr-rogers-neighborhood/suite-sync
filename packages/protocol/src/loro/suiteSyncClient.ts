@@ -1,17 +1,16 @@
+import type { LoroDoc } from "loro-crdt";
+import { decodeBase64, encodeBase64 } from "../base64.js";
 import {
   coversVersionVector,
-  decodeBase64,
   decodeSyncMessage,
-  encodeBase64,
   encodeSyncMessage,
   mergeVersionVector,
   SERVER_DEVICE_ID,
-  SYNC_PROTOCOL_VERSION,
   type SyncErrorCode,
   type SyncMessage,
   type VersionVector,
-} from "@suite/sync";
-import type { LoroDoc } from "loro-crdt";
+} from "../sync.js";
+import { SYNC_PROTOCOL_VERSION } from "../version.js";
 import { LoroSyncPeer } from "./loroPeer.js";
 
 export type SuiteSyncStatus = "connecting" | "connected" | "disconnected" | "unauthorized";

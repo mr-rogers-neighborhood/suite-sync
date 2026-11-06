@@ -2,7 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createMembershipState, type MembershipState } from "@suite/sync";
-import { LoroSyncPeer } from "@suite/sync-client";
+import { LoroSyncPeer } from "@suite/sync/loro";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   loadWorkspace,

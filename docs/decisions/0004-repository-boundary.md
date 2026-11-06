@@ -16,8 +16,10 @@ a tag.
 ## Decision
 
 - Create a dedicated **`suite-sync`** repository, published to GitHub when ready.
-- Layout: `packages/protocol` (`@suite/sync`), `packages/client` (`@suite/sync-client`),
-  `apps/server` (`suite-sync`), `docs/`, `e2e/`.
+- Layout: `packages/protocol` (`@suite/sync`: pure root plus the `./loro` adapter),
+  `apps/server` (`suite-sync`), `docs/`, `e2e/`. One package, because pnpm refuses a git
+  subdependency that depends on a sibling with `workspace:*`; this is the same reason `@suite/files`
+  keeps its Node half as a subpath.
 - Apps and Start consume the packages at a git tag, following the existing pattern.
 - The server binary is a signed GitHub Release artifact; Start supervises it where present, and Linux
   hosts get a systemd unit.

@@ -1,5 +1,5 @@
-import { type SyncMessage, type VersionVector } from "@suite/sync";
 import type { LoroDoc } from "loro-crdt";
+import { type SyncMessage, type VersionVector } from "../sync.js";
 export type SuiteSyncStatus = "connecting" | "connected" | "disconnected" | "unauthorized";
 /** The small part of a WebSocket this client uses. */
 export interface MessageEventLike {

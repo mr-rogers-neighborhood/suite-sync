@@ -6,7 +6,7 @@ import {
   type MembershipState,
   membershipEntryPayload,
 } from "@suite/sync";
-import { LoroSyncPeer } from "@suite/sync-client";
+import { LoroSyncPeer } from "@suite/sync/loro";
 import { describe, expect, it } from "vitest";
 import { SyncRoom } from "./room.js";
 

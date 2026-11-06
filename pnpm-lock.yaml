@@ -184,9 +184,6 @@ importers:
       '@suite/sync':
         specifier: workspace:*
         version: link:../../packages/protocol
-      '@suite/sync-client':
-        specifier: workspace:*
-        version: link:../../packages/client
       ws:
         specifier: ^8.22.1
         version: 8.22.1
@@ -207,24 +204,11 @@ importers:
         specifier: ^5.0.5
         version: 5.1.0(@types/node@24.19.2)(vite@8.3.6(@types/node@24.19.2))
 
-  packages/client:
+  packages/protocol:
     dependencies:
-      '@suite/sync':
-        specifier: workspace:*
-        version: link:../protocol
       loro-crdt:
         specifier: ^1.16.4
         version: 1.17.1
-    devDependencies:
-      typescript:
-        specifier: ~5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^5.0.5
-        version: 5.1.0(@types/node@24.19.2)(vite@8.3.6(@types/node@24.19.2))
-
-  packages/protocol:
-    dependencies:
       zod:
         specifier: ^4.6.7
         version: 4.6.7

@@ -1,4 +1,6 @@
-import { coversVersionVector, decodeBase64, decodeSyncMessage, encodeBase64, encodeSyncMessage, mergeVersionVector, SERVER_DEVICE_ID, SYNC_PROTOCOL_VERSION, } from "@suite/sync";
+import { decodeBase64, encodeBase64 } from "../base64.js";
+import { coversVersionVector, decodeSyncMessage, encodeSyncMessage, mergeVersionVector, SERVER_DEVICE_ID, } from "../sync.js";
+import { SYNC_PROTOCOL_VERSION } from "../version.js";
 import { LoroSyncPeer } from "./loroPeer.js";
 const OPEN = 1;
 /**

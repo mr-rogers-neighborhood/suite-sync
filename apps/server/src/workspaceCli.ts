@@ -8,7 +8,7 @@ import {
   type MembershipState,
   parseMembershipState,
 } from "@suite/sync";
-import { LoroSyncPeer } from "@suite/sync-client";
+import { LoroSyncPeer } from "@suite/sync/loro";
 import { workspaceFiles } from "./workspace.js";
 
 export interface WorkspaceMemberSummary {

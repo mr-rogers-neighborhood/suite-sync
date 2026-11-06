@@ -16,12 +16,11 @@ app owns; this repository owns the wire protocol, the membership model and the h
 
 ## What exists
 
-| Path                | What it is                                                                                                            |
-| ------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| `packages/protocol` | `@suite/sync`: ids, roles, signed membership log, version vectors, wire messages. Pure; no `fs`, no sockets, no Loro. |
-| `packages/client`   | `@suite/sync-client`: `LoroSyncPeer`, the Loro adapter for version-vector exchange.                                   |
-| `apps/server`       | `suite-sync`: room, WebSocket transport, file-backed snapshots, CLI.                                                  |
-| `docs/`             | Protocol, threat model, and the decisions behind them.                                                                |
+| Path                | What it is                                                                                                                        |
+| ------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/protocol` | `@suite/sync`: ids, roles, signed membership log, version vectors, wire messages. The root is pure; `./loro` is the Loro adapter. |
+| `apps/server`       | `suite-sync`: room, WebSocket transport, file-backed snapshots, workspace bootstrap, CLI.                                         |
+| `docs/`             | Protocol, threat model, and the decisions behind them.                                                                            |
 
 ## Commands
 
@@ -36,7 +35,9 @@ node apps/server/dist/cli.js serve --host 127.0.0.1 --port 8787
 curl http://127.0.0.1:8787/health
 
 # A workspace directory holds membership.json and an optional snapshot.loro.
-node apps/server/dist/cli.js serve --workspace /path/to/workspace
+node apps/server/dist/cli.js workspace init /tmp/demo
+node apps/server/dist/cli.js workspace show /tmp/demo
+node apps/server/dist/cli.js serve --workspace /tmp/demo
 ```
 
 ## The model in one page
@@ -47,8 +48,9 @@ node apps/server/dist/cli.js serve --workspace /path/to/workspace
 - **Membership is a signed, append-only log.** `create`, `invite`, `accept`, `set-role`, `revoke`. Only
   an active owner invites or revokes. A revoke bumps the epoch; the epoch is the group-key epoch.
 - **Sync is version vectors.** Two peers exchange `hello` vectors, each sends the updates the other is
-  missing, then a transport forwards local updates. [`LoroSyncPeer`](packages/client/src/loroPeer.ts)
-  is the reference implementation.
+  missing, then a transport forwards local updates. [`LoroSyncPeer`](packages/protocol/src/loro/loroPeer.ts)
+  is the reference implementation; [`SuiteSyncClient`](packages/protocol/src/loro/suiteSyncClient.ts)
+  is the WebSocket client.
 - **The server sees ciphertext.** That is the target, not the current room: the Phase 2 room holds a
   plaintext Loro replica so the transport and persistence can be tested. [ADR-0005](docs/decisions/0005-blind-server.md)
   turns the shipped room into a blind store of encrypted updates; the client keeps the only replica

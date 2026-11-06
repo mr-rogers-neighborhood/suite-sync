@@ -1,9 +1,10 @@
 import { defineConfig } from "vitest/config";
 
 /**
- * One project per package. The protocol is pure; the client needs Loro; the
- * server is a CLI. The `development` condition resolves a workspace package to
- * its `src`, so a test run does not depend on a prior build.
+ * One project per package. `@suite/sync` covers both the pure root and the
+ * `./loro` subpath; the server is a CLI and a transport. The `development`
+ * condition resolves a workspace package to its `src`, so a test run does not
+ * depend on a prior build.
  */
 export default defineConfig({
   resolve: {
@@ -17,13 +18,6 @@ export default defineConfig({
           name: "protocol",
           environment: "node",
           include: ["packages/protocol/src/**/*.test.ts"],
-        },
-      },
-      {
-        test: {
-          name: "client",
-          environment: "node",
-          include: ["packages/client/src/**/*.test.ts"],
         },
       },
       {

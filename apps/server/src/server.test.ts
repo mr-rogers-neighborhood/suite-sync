@@ -14,7 +14,7 @@ import {
   membershipEntryPayload,
   type SyncMessage,
 } from "@suite/sync";
-import { LoroSyncPeer } from "@suite/sync-client";
+import { LoroSyncPeer } from "@suite/sync/loro";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocket } from "ws";
 import { SyncRoom } from "./room.js";

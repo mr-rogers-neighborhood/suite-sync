@@ -1,12 +1,12 @@
+import { LoroDoc } from "loro-crdt";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { encodeBase64 } from "../base64.js";
 import {
   decodeSyncMessage,
-  encodeBase64,
   encodeSyncMessage,
   SERVER_DEVICE_ID,
   type SyncMessage,
-} from "@suite/sync";
-import { LoroDoc } from "loro-crdt";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+} from "../sync.js";
 import { type MessageEventLike, SuiteSyncClient, type WebSocketLike } from "./suiteSyncClient.js";
 
 const workspaceId = "a".repeat(64);

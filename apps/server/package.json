@@ -1,8 +1,8 @@
 {
   "name": "@suite/sync-server",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
-  "description": "The headless Suite sync server. Phase 1 is the CLI shell; the workspace server lands in Phase 2.",
+  "description": "The headless Suite sync server: rooms, WebSocket transport, snapshots, workspace bootstrap and CLI.",
   "type": "module",
   "bin": {
     "suite-sync": "./dist/cli.js"
@@ -14,7 +14,6 @@
   },
   "dependencies": {
     "@suite/sync": "workspace:*",
-    "@suite/sync-client": "workspace:*",
     "ws": "^8.22.1"
   },
   "devDependencies": {

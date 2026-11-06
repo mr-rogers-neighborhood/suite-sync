@@ -1,10 +1,10 @@
+import { LoroDoc, VersionVector as LoroVersionVector } from "loro-crdt";
 import {
   coversVersionVector,
   diffVersionVector,
   isVersionVectorEmpty,
   type VersionVector,
-} from "@suite/sync";
-import { LoroDoc, VersionVector as LoroVersionVector } from "loro-crdt";
+} from "../sync.js";
 
 /**
  * The little a sync transport needs from a document.
