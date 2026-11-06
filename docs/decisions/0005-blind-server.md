@@ -16,13 +16,17 @@ does not, it cannot merge or diff the document for the client.
 
 The shipped server is a **blind relay**:
 
-- Clients encrypt each Loro update with the workspace epoch key before it leaves the device.
+- Clients encrypt each Loro update before it leaves the device. **The key comes from the MLS group's
+  own key schedule**, not from an epoch key this design invents: see
+  [ADR-0006](0006-mls-transport.md), which replaces the "workspace epoch key" this record originally
+  described. An epoch is an MLS epoch, and it advances when membership does.
 - The server stores and forwards opaque encrypted records. It may store a header with the workspace,
   member/device, epoch and a client-supplied ordering/version hint; it does not decrypt the body.
 - **Clients exchange version vectors end-to-end.** The server does not compute Loro diffs, merge,
   index, search or project.
-- Membership and role checks use the signed membership log plus a capability on the connection, not
-  document content.
+- Membership is the MLS group ([ADR-0006](0006-mls-transport.md)); the host reads epochs and handshake
+  frames but not their contents. Role checks use a signed role record and a capability on the
+  connection. Neither reads document content.
 - Attachments are encrypted, content-addressed blobs; the server never renders them.
 - Presence is an encrypted ephemeral channel and is never persisted.
 - The Phase 2 plaintext `SyncRoom` is a development transport. It is not the shipped server and must
@@ -34,7 +38,9 @@ The shipped server is a **blind relay**:
   ignore what does not parse.
 - Clients must handle out-of-order and pending updates and request missing ranges. The server can
   enforce a maximum record size and a total workspace budget without reading content.
-- The server still enforces membership, role and epoch; those are headers/capabilities, not content.
+- The server still enforces role and epoch; those are a signed record and a header, not content. It
+  cannot verify document semantics, and it cannot tell a well-formed MLS commit from a plausible one
+  without being a member — so a client must treat every frame it receives as hostile input.
 - Metadata (workspace id, member key, sizes, timing) is visible. The threat model accepts that.
 - Server-side search, projection and share rendering are impossible; those move to trusted clients or
   to a generated static export.

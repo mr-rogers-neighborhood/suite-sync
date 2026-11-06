@@ -33,30 +33,36 @@ In v1, **each device is a member**. A person with a laptop and a desktop has two
 with its own key and role. This avoids delegated device keys while still giving the user a clean
 revocation story. Per-person members with device sub-keys can come later behind the same log.
 
-## Membership log
+## Membership
 
-The log is append-only, ordered by `seq`, and signed by the actor. The first entry must be `create`.
+Membership is the MLS group ([ADR-0006](decisions/0006-mls-transport.md)). There is no second member
+list: a device is a leaf, and the epoch is MLS's epoch. Adding a device is a Commit, removing one is a
+Remove proposal, and a device that joins receives a Welcome that carries the ratchet tree because the
+host holds none to hand over.
 
-| Action     | Who may sign      | Effect                                                                                          |
-| ---------- | ----------------- | ----------------------------------------------------------------------------------------------- |
-| `create`   | The owner's key   | Records the owner and `ownerPublicKey`. Refuses a second create.                                |
-| `invite`   | An active owner   | Records a pending invite with the invitee's public key, role (`editor`/`viewer`) and expiry.    |
-| `accept`   | The invitee's key | Turns a pending invite into an active member. The invite must be unexpired and unused.          |
-| `set-role` | An active owner   | Changes an editor/viewer role. The owner cannot be demoted in v1.                               |
-| `revoke`   | An active owner   | Marks the member revoked and increments the epoch. Pending invites for that member are revoked. |
+The host orders and stores handshake frames. It is not a member, holds no group secret, and cannot
+read what it stores.
 
-Rules enforced by `applyMembershipEntry`:
+## Role records
 
-- `seq` must be the next number.
-- The workspace must match.
-- The signature must verify against the key the action names (owner, actor or invitee).
-- Only an active owner invites, changes roles or revokes.
-- The owner cannot be demoted, revoked or self-revoked in v1.
-- A revoked member is inactive and cannot act.
-- `revoke` bumps `epoch`; that is the signal to rotate the group key.
+MLS says who is in the group, not who may write. A **role record** per device travels beside the group:
 
-The signature payload is canonical JSON of `{seq, workspaceId, actorId, createdAt, action}`, with keys
-sorted. The `signature` field is excluded.
+```ts
+type RoleRecord = { workspaceId, deviceId, role: "owner" | "editor" | "viewer", seq, signature };
+```
+
+It is signed by an owner's device key and ordered by `seq`, so the host can check `role !== "viewer"`
+before it stores a frame without decrypting one. Authorship is a device-key signature on each frame,
+which lets a reader attribute a change without trusting the host's ordering.
+
+Rules:
+
+- Only an owner's device may write a role record, and only for a device already in the group.
+- A viewer's frames are refused by the host, not merely discouraged in a UI.
+- Revoking a device is a Remove commit; the new epoch makes the revoked device unable to read anything
+  that follows, and the host drops its connection.
+- The last owner cannot be demoted or removed. Ownership transfer is out of scope until there is a
+  two-owner story.
 
 ## Sync messages
 
@@ -88,6 +94,30 @@ from})` sends the diff, not the whole history.
 Presence is not in the durable message set. It uses a separate ephemeral channel with a time to live;
 a dropped connection must not leave a ghost cursor. A position is persisted only when the reader
 releases the drag, which is a normal document write.
+
+## The frame
+
+The host stores one opaque record per message. It can read the header and nothing else.
+
+```ts
+type Frame = {
+  kind: "commit" | "welcome" | "application";   // application = a document update
+  workspaceId: string;
+  deviceId: string;        // who sent it, and whose signature it carries
+  epoch: number;           // the MLS epoch the sender was in
+  payload: string;         // base64 of the encoded MLS message
+  signature: string;       // device key over the header and payload
+  receivedAt: string;      // stamped by the host
+};
+```
+
+**A client ignores a frame whose epoch is not the one it is in.** The library does not do this: the
+spike showed a commit from an already-passed epoch is quietly absorbed as an application message
+rather than refused ([ADR-0006](decisions/0006-mls-transport.md)). The receiver holds the epoch
+comparison, and the host refuses to store a frame whose epoch is older than the workspace's.
+
+Sizes, measured rather than estimated: a commit is 0.5 kB, a welcome 0.8 kB, an application message
+0.3 kB, and a device's group state 1.6 kB.
 
 ## Server transport (Phase 2 slice)
 
@@ -124,8 +154,10 @@ The Phase 2 plaintext room satisfies 3–6 but not 1–2. It is loopback-only un
 
 ## Open questions
 
-- Retention and compaction: how many update logs, snapshots and daily backups.
-- Attachment transport: content-addressed blobs vs a `.canvas` bundle.
-- Invite transport: QR + short code, and how the endpoint hints travel.
-- Host promotion: who may promote a new active server, and how clients discover it.
-- Metadata: what the server may learn about workspace size and member activity.
+- Retention and compaction: how many frames, snapshots and daily backups. The host cannot merge what
+  it stores, so a client offline past the window needs a snapshot from a peer.
+- Attachments: content-addressed blobs, and which key addresses them.
+- Host promotion: who may take over when the host machine is gone, and how a client learns the new
+  address.
+- Recovery: MLS has no escrow, so the kit is a design decision about what to export, not a library
+  call.
