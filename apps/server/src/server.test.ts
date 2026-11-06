@@ -366,6 +366,6 @@ describe("sync server", () => {
     const { server: running } = await start();
     const response = await fetch(`http://${running.host}:${running.port}/health`);
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ ok: true, rooms: 1 });
+    expect(await response.json()).toEqual({ ok: true, rooms: 1, clients: 0 });
   });
 });

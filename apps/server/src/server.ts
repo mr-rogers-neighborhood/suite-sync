@@ -85,7 +85,13 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
   const httpServer = createServer((request, response) => {
     if (request.url === "/health") {
       response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ ok: true, rooms: options.registry.size }));
+      response.end(
+        JSON.stringify({
+          ok: true,
+          rooms: options.registry.size,
+          clients: wss.clients.size,
+        }),
+      );
       return;
     }
     response.writeHead(404, { "content-type": "text/plain" });
