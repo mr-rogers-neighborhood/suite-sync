@@ -70,6 +70,21 @@ export {
   roleOf,
 } from "./membership.js";
 export {
+  applyRoleRecord,
+  applyRoleRecords,
+  createRoleState,
+  mayWrite,
+  ownerDevices,
+  type RoleRecord,
+  type RoleRejection,
+  type RoleResult,
+  type RoleState,
+  type RoleVerifier,
+  roleOfDevice,
+  roleRecordPayload,
+  roleRecordSchema,
+} from "./roleRecord.js";
+export {
   canInvite,
   canWrite,
   type MemberRole,
