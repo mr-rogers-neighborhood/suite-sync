@@ -52,6 +52,7 @@ export declare class SuiteSyncClient {
     private syncedOnce;
     private closedByUser;
     private unauthorized;
+    private applyingRemote;
     private reconnectAttempt;
     private reconnectTimer;
     private flushWaiters;

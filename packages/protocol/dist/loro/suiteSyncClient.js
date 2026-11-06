@@ -24,6 +24,7 @@ export class SuiteSyncClient {
     syncedOnce = false;
     closedByUser = false;
     unauthorized = false;
+    applyingRemote = false;
     reconnectAttempt = 0;
     reconnectTimer = null;
     flushWaiters = [];
@@ -172,11 +173,19 @@ export class SuiteSyncClient {
         const bytes = decodeBase64(payload);
         if (bytes === null)
             return;
+        // A remote import must not be echoed back as a local edit. Loro's local
+        // subscriber can fire while the import is being applied, and an app that
+        // reacts to the change (a migration, a seed) would otherwise start a loop
+        // between two clients.
+        this.applyingRemote = true;
         try {
             this.peer.applyUpdate(bytes);
         }
         catch {
             // A malformed peer update is ignored; the local document is unchanged.
+        }
+        finally {
+            this.applyingRemote = false;
         }
     }
     handleError(code) {
@@ -204,6 +213,8 @@ export class SuiteSyncClient {
         }));
     }
     sendUpdate(update) {
+        if (this.applyingRemote)
+            return;
         if (update.length === 0)
             return;
         if (this.socket === null || this.socket.readyState !== OPEN)

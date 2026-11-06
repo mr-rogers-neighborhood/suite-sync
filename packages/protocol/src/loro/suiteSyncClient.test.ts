@@ -164,6 +164,46 @@ describe("SuiteSyncClient", () => {
     expect(doc.getMap("root").get("remote")).toBe("yes");
   });
 
+  it("does not echo a remote update back to the server", async () => {
+    const doc = new LoroDoc();
+    const client = new SuiteSyncClient({
+      url: "ws://test/sync",
+      workspaceId,
+      memberId,
+      deviceId: memberId,
+      epoch: 1,
+      doc,
+      WebSocket: fakeWebSocket(),
+    });
+
+    const connected = client.connect();
+    sockets[0]?.open();
+    await connected;
+    sockets[0]?.receive({ type: "ack", epoch: 1, versionVector: {} });
+
+    const remote = new LoroDoc();
+    remote.getMap("root").set("remote", "yes");
+    remote.commit();
+
+    const before = messages(sockets[0] as FakeSocket).filter(
+      (message) => message.type === "update",
+    ).length;
+    sockets[0]?.receive({
+      type: "update",
+      workspaceId,
+      from: otherDevice,
+      to: memberId,
+      epoch: 1,
+      payload: encodeBase64(remote.export({ mode: "update" })),
+    });
+    const after = messages(sockets[0] as FakeSocket).filter(
+      (message) => message.type === "update",
+    ).length;
+
+    expect(after).toBe(before);
+    expect(doc.getMap("root").get("remote")).toBe("yes");
+  });
+
   it("stops on an unauthorized answer", async () => {
     const client = new SuiteSyncClient({
       url: "ws://test/sync",
