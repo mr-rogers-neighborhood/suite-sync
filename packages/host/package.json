@@ -29,6 +29,6 @@
     "ws": "^8.22.1"
   },
   "peerDependencies": {
-    "@suite/sync": "^0.6.0"
+    "@suite/sync": "^0.7.0"
   }
 }
