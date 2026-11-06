@@ -6,9 +6,12 @@ Suite operates no server. A person runs `suite-sync` on a device they control â€
 an always-on computer, a laptop â€” and their other devices sync with it. The document stays a file the
 app owns; this repository owns the wire protocol, the membership model and the headless server.
 
-> **Status: Phase 1 + the Phase 2 transport slice.** The protocol, the Loro adapter, the membership
-> state machine, a room, a WebSocket server and a file-backed snapshot store are here. `serve` starts
-> the server and `/health` answers.
+> **Status: Phase 2 + the first Canvas demo.** The protocol, the Loro adapter, the membership state
+> machine, a room, a WebSocket server, a file-backed snapshot store, the workspace bootstrap CLI and
+> the `SuiteSyncClient` transport are here. Two Canvas clients can sync one workspace through a local
+> server; `pnpm check` covers 87 tests across 14 files.
+>
+> **Try it:** [Run the Canvas sync demo](docs/how-to/canvas-sync-demo.md).
 >
 > **Not shippable yet.** The room is plaintext and there is no TLS. `serve` binds to `127.0.0.1` by
 > default and must not be exposed beyond a trusted network until the identity/encryption phase
@@ -34,9 +37,11 @@ node apps/server/dist/cli.js --version
 node apps/server/dist/cli.js serve --host 127.0.0.1 --port 8787
 curl http://127.0.0.1:8787/health
 
-# A workspace directory holds membership.json and an optional snapshot.loro.
+# A workspace directory holds membership.json and a snapshot.loro.
 node apps/server/dist/cli.js workspace init /tmp/demo
 node apps/server/dist/cli.js workspace show /tmp/demo
+node apps/server/dist/cli.js workspace add-member /tmp/demo \
+  --member <64-hex> --role viewer --name Viewer
 node apps/server/dist/cli.js serve --workspace /tmp/demo
 ```
 
