@@ -1,6 +1,6 @@
 {
   "name": "@suite/sync",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "The Suite sync protocol: workspace, device and member identity, signed membership, version vectors and wire messages. The root entry is pure TypeScript with no Loro; ./loro is the Loro document and WebSocket client half.",
   "type": "module",
   "main": "./dist/index.js",
@@ -8,13 +8,11 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "development": "./src/index.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
     "./loro": {
       "types": "./dist/loro/index.d.ts",
-      "development": "./src/loro/index.ts",
       "import": "./dist/loro/index.js",
       "default": "./dist/loro/index.js"
     }

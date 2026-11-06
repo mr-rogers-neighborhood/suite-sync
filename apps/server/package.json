@@ -1,6 +1,6 @@
 {
   "name": "@suite/sync-server",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "The headless Suite sync server: rooms, WebSocket transport, snapshots, workspace bootstrap and CLI.",
   "type": "module",
