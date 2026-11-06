@@ -4,6 +4,7 @@ export { type Frame, type FrameHeader, type FrameKind, type FrameRejection, fram
 export { type AddDeviceResult, addDevice, createDeviceIdentity, createWorkspaceGroup, type DeviceGroup, type DeviceIdentity, decodeGroup, encodeGroup, exportKey, joinWorkspaceGroup, leafIndexOf, type OpenedMessage, open, type RemoveDeviceResult, removeDevice, type SealedMessage, SUITE_CIPHERSUITE, seal, } from "./group.js";
 export { type DeviceId, deviceIdSchema, type InviteId, inviteIdSchema, isDeviceId, isInviteId, isMemberId, isWorkspaceId, type MemberId, memberIdSchema, type WorkspaceId, workspaceIdSchema, } from "./ids.js";
 export { encodeRelayMessage, isRelayCompatible, parseClientMessage, parseHostMessage, RELAY_PROTOCOL_VERSION, type RelayApplied, type RelayClientMessage, type RelayErrorCode, type RelayFrame, type RelayHostMessage, type RelayJoined, relayClientMessageSchema, relayErrorCodeSchema, relayHostMessageSchema, } from "./relay.js";
+export { createRelayClient, type RelayClient, type RelayClientHandlers, type RelayClientOptions, type RelayWebSocket, type RelayWebSocketFactory, signFrame, } from "./relayClient.js";
 export { applyRoleRecord, applyRoleRecords, createRoleState, mayWrite, ownerDevices, type RoleRecord, type RoleRejection, type RoleResult, type RoleState, type RoleVerifier, roleOfDevice, roleRecordPayload, roleRecordSchema, roleRejectionSchema, } from "./roleRecord.js";
 export { canInvite, canWrite, type MemberRole, memberRoleSchema, roleRank, } from "./roles.js";
 export { isProtocolCompatible, SYNC_PROTOCOL_VERSION } from "./version.js";

@@ -66,6 +66,15 @@ export {
   relayHostMessageSchema,
 } from "./relay.js";
 export {
+  createRelayClient,
+  type RelayClient,
+  type RelayClientHandlers,
+  type RelayClientOptions,
+  type RelayWebSocket,
+  type RelayWebSocketFactory,
+  signFrame,
+} from "./relayClient.js";
+export {
   applyRoleRecord,
   applyRoleRecords,
   createRoleState,
