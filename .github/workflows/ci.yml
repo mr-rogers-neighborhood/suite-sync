@@ -20,7 +20,9 @@ env:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    # Pinned: the runner image migrates on its own schedule, and an Electron build
+    # should not go red for a reason that has nothing to do with this change.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
