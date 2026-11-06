@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { canonicalJson } from "./canonical.js";
 import { inviteIdSchema, memberIdSchema, workspaceIdSchema } from "./ids.js";
-import { canInvite } from "./roles.js";
+import { canInvite, memberRoleSchema } from "./roles.js";
 const displayNameSchema = z.string().trim().min(1).max(80);
 const keySchema = z.string().min(1).max(4096);
 const signatureSchema = z.string().min(1).max(4096);
@@ -62,6 +62,56 @@ export const membershipEntrySchema = z
     signature: signatureSchema,
 })
     .strict();
+export const memberRecordSchema = z
+    .object({
+    memberId: memberIdSchema,
+    displayName: displayNameSchema,
+    publicKey: keySchema,
+    role: memberRoleSchema,
+    status: z.enum(["active", "revoked"]),
+    joinedAt: z.iso.datetime(),
+    epoch: z.number().int().positive(),
+})
+    .strict();
+export const inviteRecordSchema = z
+    .object({
+    inviteId: inviteIdSchema,
+    memberId: memberIdSchema,
+    publicKey: keySchema,
+    displayName: displayNameSchema,
+    role: memberRoleSchema,
+    expiresAt: z.iso.datetime(),
+    status: z.enum(["pending", "accepted", "revoked", "expired"]),
+})
+    .strict();
+/**
+ * A serialized membership state.
+ *
+ * This is a Phase 2 admin shape: the operator writes it beside a snapshot. The
+ * signed log in `membershipEntrySchema` is the source of truth; this state is
+ * what a replay produces and what the server loads before the invite flow lands.
+ */
+export const membershipStateSchema = z
+    .object({
+    workspaceId: workspaceIdSchema,
+    epoch: z.number().int().positive(),
+    lastSeq: z.number().int().nonnegative(),
+    members: z.record(memberIdSchema, memberRecordSchema),
+    invites: z.record(inviteIdSchema, inviteRecordSchema),
+})
+    .strict();
+export function parseMembershipState(value) {
+    const parsed = membershipStateSchema.safeParse(value);
+    if (parsed.success)
+        return { ok: true, value: parsed.data };
+    return {
+        ok: false,
+        issues: parsed.error.issues.map((issue) => {
+            const path = issue.path.map(String).join(".");
+            return path.length > 0 ? `${path}: ${issue.message}` : issue.message;
+        }),
+    };
+}
 /** A workspace with no membership yet. The first entry must be `create`. */
 export function createMembershipState(workspaceId) {
     return {

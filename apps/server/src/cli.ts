@@ -2,6 +2,7 @@
 import { pathToFileURL } from "node:url";
 import { SYNC_PROTOCOL_VERSION } from "@suite/sync";
 import { createSyncServer, RoomRegistry } from "./server.js";
+import { loadWorkspace } from "./workspace.js";
 
 export const SERVER_NAME = "suite-sync";
 export const SERVER_VERSION = "0.1.0";
@@ -17,6 +18,7 @@ export interface CliResult {
 export interface ServeOptions {
   readonly host: string;
   readonly port: number;
+  readonly workspaces: readonly string[];
 }
 
 export type ServeOptionsParse =
@@ -28,10 +30,10 @@ const USAGE = `suite-sync ${SERVER_VERSION} (protocol ${SYNC_PROTOCOL_VERSION})
 Usage:
   suite-sync --version                              print the server and protocol versions
   suite-sync status                                 report whether a workspace is configured
-  suite-sync serve [--host <host>] [--port <port>]  run the workspace server
+  suite-sync serve [--host <host>] [--port <port>] [--workspace <dir>]...
 
-The server starts with no workspaces. Phase 2 adds \`workspace add\`; until then,
-\`serve\` fixes the process, the health route and the WebSocket surface.
+A workspace directory holds \`membership.json\` and an optional \`snapshot.loro\`.
+The server starts with no workspaces when none are named.
 `;
 
 /**
@@ -80,10 +82,21 @@ export function runCli(argv: readonly string[]): CliResult {
 export function parseServeOptions(argv: readonly string[]): ServeOptionsParse {
   let host = DEFAULT_HOST;
   let port = DEFAULT_PORT;
+  const workspaces: string[] = [];
 
   for (let index = 0; index < argv.length; index += 1) {
     const argument = argv[index];
     if (argument === undefined) continue;
+
+    if (argument === "--workspace") {
+      const value = argv[index + 1]?.trim();
+      if (value === undefined || value.length === 0) {
+        return { ok: false, error: "--workspace needs a directory" };
+      }
+      workspaces.push(value);
+      index += 1;
+      continue;
+    }
 
     if (argument === "--host") {
       const value = argv[index + 1]?.trim();
@@ -110,12 +123,16 @@ export function parseServeOptions(argv: readonly string[]): ServeOptionsParse {
     return { ok: false, error: `unknown option: ${argument}` };
   }
 
-  return { ok: true, value: { host, port } };
+  return { ok: true, value: { host, port, workspaces } };
 }
 
 /** Start the server and keep the process alive until SIGINT or SIGTERM. */
 export async function serve(options: ServeOptions): Promise<void> {
   const registry = new RoomRegistry();
+  for (const directory of options.workspaces) {
+    registry.add(await loadWorkspace(directory));
+  }
+
   const server = await createSyncServer({
     registry,
     host: options.host,
@@ -123,7 +140,7 @@ export async function serve(options: ServeOptions): Promise<void> {
   });
 
   process.stdout.write(`${SERVER_NAME} listening on ${server.url}\n`);
-  process.stdout.write(`${SERVER_NAME}: no workspaces configured yet\n`);
+  process.stdout.write(`${SERVER_NAME}: ${registry.size} workspace(s)\n`);
 
   await new Promise<void>((resolve) => {
     const stop = (): void => {
@@ -148,7 +165,12 @@ if (isMain) {
       process.stderr.write(`${parsed.error}\n`);
       process.exitCode = 1;
     } else {
-      await serve(parsed.value);
+      try {
+        await serve(parsed.value);
+      } catch (error) {
+        process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+        process.exitCode = 1;
+      }
     }
   } else {
     const result = runCli(process.argv.slice(2));

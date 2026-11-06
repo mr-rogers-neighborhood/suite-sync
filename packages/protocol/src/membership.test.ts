@@ -8,6 +8,7 @@ import {
   type MembershipState,
   membershipEntryPayload,
   parseMembershipEntry,
+  parseMembershipState,
 } from "./membership.js";
 import { canWrite } from "./roles.js";
 
@@ -233,6 +234,16 @@ describe("membership", () => {
     );
     const result = applyMembershipEntry(state, same, verify, NOW);
     expect(result).toEqual({ ok: false, reason: "role-unchanged" });
+  });
+
+  it("parses a serialized membership state", () => {
+    const state = createdState();
+    expect(parseMembershipState(state)).toEqual({ ok: true, value: state });
+
+    const invalid = parseMembershipState({ ...state, epoch: 0 });
+    expect(invalid.ok).toBe(false);
+    if (invalid.ok) return;
+    expect(invalid.issues.length).toBeGreaterThan(0);
   });
 
   it("parses a valid entry and reports every issue in an invalid one", () => {

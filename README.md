@@ -34,6 +34,9 @@ pnpm --filter @suite/sync-server build
 node apps/server/dist/cli.js --version
 node apps/server/dist/cli.js serve --host 127.0.0.1 --port 8787
 curl http://127.0.0.1:8787/health
+
+# A workspace directory holds membership.json and an optional snapshot.loro.
+node apps/server/dist/cli.js serve --workspace /path/to/workspace
 ```
 
 ## The model in one page

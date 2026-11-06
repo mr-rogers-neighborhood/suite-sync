@@ -102,6 +102,94 @@ export interface MembershipState {
     readonly members: Readonly<Record<string, MemberRecord>>;
     readonly invites: Readonly<Record<string, InviteRecord>>;
 }
+export declare const memberRecordSchema: z.ZodObject<{
+    memberId: z.ZodString;
+    displayName: z.ZodString;
+    publicKey: z.ZodString;
+    role: z.ZodEnum<{
+        owner: "owner";
+        editor: "editor";
+        viewer: "viewer";
+    }>;
+    status: z.ZodEnum<{
+        active: "active";
+        revoked: "revoked";
+    }>;
+    joinedAt: z.ZodISODateTime;
+    epoch: z.ZodNumber;
+}, z.core.$strict>;
+export declare const inviteRecordSchema: z.ZodObject<{
+    inviteId: z.ZodString;
+    memberId: z.ZodString;
+    publicKey: z.ZodString;
+    displayName: z.ZodString;
+    role: z.ZodEnum<{
+        owner: "owner";
+        editor: "editor";
+        viewer: "viewer";
+    }>;
+    expiresAt: z.ZodISODateTime;
+    status: z.ZodEnum<{
+        revoked: "revoked";
+        pending: "pending";
+        accepted: "accepted";
+        expired: "expired";
+    }>;
+}, z.core.$strict>;
+/**
+ * A serialized membership state.
+ *
+ * This is a Phase 2 admin shape: the operator writes it beside a snapshot. The
+ * signed log in `membershipEntrySchema` is the source of truth; this state is
+ * what a replay produces and what the server loads before the invite flow lands.
+ */
+export declare const membershipStateSchema: z.ZodObject<{
+    workspaceId: z.ZodString;
+    epoch: z.ZodNumber;
+    lastSeq: z.ZodNumber;
+    members: z.ZodRecord<z.ZodString, z.ZodObject<{
+        memberId: z.ZodString;
+        displayName: z.ZodString;
+        publicKey: z.ZodString;
+        role: z.ZodEnum<{
+            owner: "owner";
+            editor: "editor";
+            viewer: "viewer";
+        }>;
+        status: z.ZodEnum<{
+            active: "active";
+            revoked: "revoked";
+        }>;
+        joinedAt: z.ZodISODateTime;
+        epoch: z.ZodNumber;
+    }, z.core.$strict>>;
+    invites: z.ZodRecord<z.ZodString, z.ZodObject<{
+        inviteId: z.ZodString;
+        memberId: z.ZodString;
+        publicKey: z.ZodString;
+        displayName: z.ZodString;
+        role: z.ZodEnum<{
+            owner: "owner";
+            editor: "editor";
+            viewer: "viewer";
+        }>;
+        expiresAt: z.ZodISODateTime;
+        status: z.ZodEnum<{
+            revoked: "revoked";
+            pending: "pending";
+            accepted: "accepted";
+            expired: "expired";
+        }>;
+    }, z.core.$strict>>;
+}, z.core.$strict>;
+export type MembershipStateParse = {
+    readonly ok: true;
+    readonly value: MembershipState;
+} | {
+    readonly ok: false;
+    readonly issues: readonly string[];
+};
+export declare function parseMembershipState(value: unknown): MembershipStateParse;
 export type MembershipRejection = "wrong-workspace" | "wrong-seq" | "invalid-signature" | "already-initialised" | "not-member" | "member-inactive" | "member-active" | "member-exists" | "not-owner" | "invite-exists" | "unknown-invite" | "invite-not-pending" | "invite-not-yours" | "invite-expired" | "owner-cannot-be-demoted" | "owner-cannot-be-revoked" | "role-unchanged" | "self-revoke";
 export type MembershipResult = {
     readonly ok: true;

@@ -39,21 +39,28 @@ describe("parseServeOptions", () => {
   it("uses loopback and the default port", () => {
     expect(parseServeOptions([])).toEqual({
       ok: true,
-      value: { host: DEFAULT_HOST, port: DEFAULT_PORT },
+      value: { host: DEFAULT_HOST, port: DEFAULT_PORT, workspaces: [] },
     });
   });
 
   it("reads host and port", () => {
     expect(parseServeOptions(["--host", "0.0.0.0", "--port", "9000"])).toEqual({
       ok: true,
-      value: { host: "0.0.0.0", port: 9000 },
+      value: { host: "0.0.0.0", port: 9000, workspaces: [] },
+    });
+  });
+
+  it("collects repeatable workspace directories", () => {
+    expect(parseServeOptions(["--workspace", "/tmp/a", "--workspace", "/tmp/b"])).toEqual({
+      ok: true,
+      value: { host: DEFAULT_HOST, port: DEFAULT_PORT, workspaces: ["/tmp/a", "/tmp/b"] },
     });
   });
 
   it("accepts port 0 for an operating-system port", () => {
     expect(parseServeOptions(["--port", "0"])).toEqual({
       ok: true,
-      value: { host: DEFAULT_HOST, port: 0 },
+      value: { host: DEFAULT_HOST, port: 0, workspaces: [] },
     });
   });
 
@@ -65,6 +72,10 @@ describe("parseServeOptions", () => {
     expect(parseServeOptions(["--port"])).toEqual({
       ok: false,
       error: "--port needs a value",
+    });
+    expect(parseServeOptions(["--workspace"])).toEqual({
+      ok: false,
+      error: "--workspace needs a directory",
     });
     expect(parseServeOptions(["--port", "70000"])).toEqual({
       ok: false,

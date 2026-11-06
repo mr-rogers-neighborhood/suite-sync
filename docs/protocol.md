@@ -101,8 +101,10 @@ The current transport is a WebSocket at `/sync` with a `/health` HTTP route.
 - `error` codes: `protocol-version`, `unauthorized`, `forbidden`, `epoch-mismatch`, `malformed`,
   `busy`, `unknown`.
 - The server binds to `127.0.0.1` by default; `--host` is explicit. There is no TLS yet.
-- A room snapshot is written to a file with a temp-file rename and loaded on the next boot. Membership
-  state is loaded out of band in Phase 2; the invite/accept path is the next step.
+- A room snapshot is written to a file with a temp-file rename and loaded on the next boot.
+- `serve --workspace <dir>` loads a Phase 2 workspace directory: `membership.json` (the serialized
+  membership state) and an optional `snapshot.loro` (a full Loro snapshot). The membership file is
+  trusted admin input for now; the signed log and the invite/accept path replace it next.
 
 **The Phase 2 room is plaintext and is a development transport.** The shipped server is a blind relay
 per [ADR-0005](../decisions/0005-blind-server.md): encrypted updates, client-side version vectors, no
