@@ -1,6 +1,6 @@
 {
   "name": "@suite/host",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "The Suite sync host: a blind relay that stores encrypted frames, pins a device key, and keeps the role records that decide who may write. Embeds in Start, or runs as a CLI.",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,6 +29,6 @@
     "ws": "^8.22.1"
   },
   "peerDependencies": {
-    "@suite/sync": "^0.9.1"
+    "@suite/sync": "^0.9.2"
   }
 }

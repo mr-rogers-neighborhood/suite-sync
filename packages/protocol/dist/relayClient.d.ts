@@ -26,6 +26,8 @@ export interface RelayClientOptions {
     readonly deviceId: string;
     /** Base64 Ed25519 public key. The host pins it on first join. */
     readonly publicKey: string;
+    /** What this device calls itself, for the other person's screen. */
+    readonly name: string;
     /** Signs the header of every frame this client sends. */
     readonly sign: (payload: Uint8Array) => string;
     readonly webSocket?: RelayWebSocketFactory;

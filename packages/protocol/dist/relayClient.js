@@ -24,6 +24,7 @@ export function createRelayClient(options, handlers) {
                 workspaceId: options.workspaceId,
                 deviceId: options.deviceId,
                 publicKey: options.publicKey,
+                name: options.name,
             });
             resolve({
                 send: (frame) => send({ type: "frame", frame }),
