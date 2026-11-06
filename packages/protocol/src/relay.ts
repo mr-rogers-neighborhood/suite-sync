@@ -12,13 +12,22 @@ import { roleRecordSchema, roleRejectionSchema } from "./roleRecord.js";
  */
 export const RELAY_PROTOCOL_VERSION = 1;
 
-/** A client announces itself. The device id is who it claims to be; its frames prove it. */
+/**
+ * A client announces itself.
+ *
+ * The device id is who it claims to be, and `publicKey` is what it will prove it with: the
+ * host pins the key the first time it sees a device and checks every frame and role record
+ * against that key afterwards. Pinning is not a claim that the device is trustworthy —
+ * membership in the MLS group is — it is what lets the host tell one device from another.
+ */
 const joinSchema = z
   .object({
     type: z.literal("join"),
     protocolVersion: z.number().int().positive(),
     workspaceId: workspaceIdSchema,
     deviceId: deviceIdSchema,
+    /** Base64 of the device's Ed25519 public key. */
+    publicKey: z.string().min(1),
   })
   .strict();
 
@@ -63,6 +72,21 @@ const frameOutSchema = z
   })
   .strict();
 
+/**
+ * A role record the host applied, echoed to the device that sent it.
+ *
+ * Without this a client cannot tell whether its role landed, and an app has to know it is
+ * an owner before it offers to invite anything.
+ */
+const appliedSchema = z
+  .object({
+    type: z.literal("applied"),
+    deviceId: deviceIdSchema,
+    role: z.enum(["owner", "editor", "viewer"]),
+    seq: z.number().int().nonnegative(),
+  })
+  .strict();
+
 const refusedSchema = z
   .object({
     type: z.literal("refused"),
@@ -90,6 +114,7 @@ const errorSchema = z
 
 export const relayHostMessageSchema = z.discriminatedUnion("type", [
   joinedSchema,
+  appliedSchema,
   frameOutSchema,
   refusedSchema,
   errorSchema,
@@ -97,6 +122,7 @@ export const relayHostMessageSchema = z.discriminatedUnion("type", [
 
 export type RelayHostMessage = z.infer<typeof relayHostMessageSchema>;
 export type RelayJoined = z.infer<typeof joinedSchema>;
+export type RelayApplied = z.infer<typeof appliedSchema>;
 export type RelayFrame = z.infer<typeof frameOutSchema>;
 
 export function encodeRelayMessage(message: RelayClientMessage | RelayHostMessage): string {

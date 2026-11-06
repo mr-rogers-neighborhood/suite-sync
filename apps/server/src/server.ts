@@ -7,12 +7,13 @@ import {
   parseClientMessage,
   RELAY_PROTOCOL_VERSION,
   type RelayClientMessage,
+  type RoleRecord,
   type RoleState,
   type RoleVerifier,
 } from "@suite/sync";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
 import { admitFrame, FrameLog, type FrameVerifier } from "./blindRoom.js";
-import { FileFrameStore, type FrameStore } from "./store.js";
+import { FileHostStore, type HostStore, type PinnedKey } from "./store.js";
 
 /**
  * The host: a mailbox with an opinion about who may post.
@@ -24,6 +25,8 @@ export interface HostedRoom {
   readonly workspaceId: string;
   readonly log: FrameLog;
   roles: RoleState;
+  /** The key each device joined with. Without it a restart could verify nothing. */
+  readonly keys: Map<string, string>;
   readonly sockets: Set<WebSocket>;
 }
 
@@ -52,10 +55,10 @@ export interface SyncServerOptions {
   /** 0 asks the operating system for a free port; useful in tests. */
   readonly port?: number;
   readonly host?: string;
-  readonly store?: FrameStore;
-  /** Device key check for incoming frames. */
+  readonly store?: HostStore;
+  /** Device key check for incoming frames, against the key the device joined with. */
   readonly verifyFrame: FrameVerifier;
-  /** Device key check for role records. */
+  /** The same check for role records. */
   readonly verifyRole: RoleVerifier;
   /** How long a frame is kept. A device away longer needs a snapshot from a peer. */
   readonly retentionDays?: number;
@@ -80,9 +83,10 @@ const DEFAULT_RETENTION_DAYS = 30;
 export async function createSyncServer(options: SyncServerOptions): Promise<SyncServer> {
   const host = options.host ?? "127.0.0.1";
   const port = options.port ?? 0;
-  const store = options.store ?? new FileFrameStore(".suite-sync");
+  const store = options.store ?? new FileHostStore(".suite-sync");
   const now = options.now ?? (() => new Date());
   const retentionDays = options.retentionDays ?? DEFAULT_RETENTION_DAYS;
+  const registry = options.registry;
 
   const httpServer = createServer((request, response) => {
     if (request.url === "/health") {
@@ -90,7 +94,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       response.end(
         JSON.stringify({
           ok: true,
-          workspaces: options.registry.size,
+          workspaces: registry.size,
           clients: wss.clients.size,
         }),
       );
@@ -104,8 +108,15 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
   const contexts = new WeakMap<WebSocket, SocketContext>();
   const loading = new Map<string, Promise<HostedRoom>>();
 
+  /**
+   * Load a workspace, or find the one already running.
+   *
+   * Roles and keys are replayed before anything else can be judged: a room that came back
+   * with an empty role list would refuse every frame, which looks exactly like a broken
+   * workspace rather than a forgotten file.
+   */
   async function roomFor(workspaceId: string): Promise<HostedRoom> {
-    const existing = options.registry.get(workspaceId);
+    const existing = registry.get(workspaceId);
     if (existing !== undefined) return existing;
 
     const pending = loading.get(workspaceId);
@@ -116,11 +127,21 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
         workspaceId,
         log: new FrameLog(workspaceId),
         roles: createRoleState(workspaceId),
+        keys: new Map(),
         sockets: new Set(),
       };
-      for (const frame of await store.load(workspaceId)) room.log.append(frame);
+
+      for (const frame of await store.loadFrames(workspaceId)) room.log.append(frame);
       room.log.dropOlderThan(cutoffIso(now(), retentionDays));
-      options.registry.add(room);
+
+      for (const key of await store.loadKeys(workspaceId))
+        room.keys.set(key.deviceId, key.publicKey);
+      for (const record of await store.loadRoles(workspaceId)) {
+        const applied = applyRoleRecord(room.roles, record, roleVerifierFor(room));
+        if (applied.ok) room.roles = applied.state;
+      }
+
+      registry.add(room);
       return room;
     })();
 
@@ -132,13 +153,19 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     }
   }
 
+  function roleVerifierFor(room: HostedRoom): RoleVerifier {
+    return (payload, signature, signerId) => {
+      const key = room.keys.get(signerId);
+      return key !== undefined && options.verifyRole(payload, signature, key);
+    };
+  }
+
   wss.on("connection", (socket) => {
     socket.on("message", (data) => {
       void handleMessage(socket, data);
     });
     socket.on("close", () => {
-      const context = contexts.get(socket);
-      context?.room.sockets.delete(socket);
+      contexts.get(socket)?.room.sockets.delete(socket);
     });
   });
 
@@ -162,7 +189,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
 
     switch (message.type) {
       case "role":
-        handleRole(context, message.record);
+        await handleRole(socket, context, message.record);
         return;
       case "frame":
         await handleFrame(socket, context, message.frame);
@@ -185,6 +212,21 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     }
 
     const room = await roomFor(message.workspaceId);
+    const pinned = room.keys.get(message.deviceId);
+    if (pinned !== undefined && pinned !== message.publicKey) {
+      // The same device id with a different key is either a reinstall or an impersonation.
+      // Either way the host cannot tell them apart, so it refuses rather than pick.
+      sendError(socket, "unknown", "that device id is already pinned to another key");
+      return;
+    }
+    if (pinned === undefined) {
+      room.keys.set(message.deviceId, message.publicKey);
+      await store.appendKey(message.workspaceId, {
+        deviceId: message.deviceId,
+        publicKey: message.publicKey,
+      });
+    }
+
     contexts.set(socket, { room, deviceId: message.deviceId });
     room.sockets.add(socket);
 
@@ -197,16 +239,25 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     });
   }
 
-  function handleRole(context: SocketContext, record: Parameters<typeof applyRoleRecord>[1]): void {
-    const applied = applyRoleRecord(context.room.roles, record, options.verifyRole);
+  async function handleRole(
+    socket: WebSocket,
+    context: SocketContext,
+    record: RoleRecord,
+  ): Promise<void> {
+    const applied = applyRoleRecord(context.room.roles, record, roleVerifierFor(context.room));
     if (!applied.ok) {
-      send(context.room.sockets, {
-        type: "refused",
-        reason: applied.reason,
-      });
+      // To the sender. Broadcasting one device's bad record would read as everybody's.
+      send(socket, { type: "refused", reason: applied.reason });
       return;
     }
     context.room.roles = applied.state;
+    await store.appendRole(context.room.workspaceId, record);
+    send(socket, {
+      type: "applied",
+      deviceId: record.deviceId,
+      role: record.role,
+      seq: record.seq,
+    });
   }
 
   async function handleFrame(
@@ -218,6 +269,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       sealed,
       { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch },
       context.room.roles,
+      (deviceId) => context.room.keys.get(deviceId) ?? null,
       options.verifyFrame,
       now().toISOString(),
     );
@@ -229,13 +281,23 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
 
     const index = context.room.log.length;
     context.room.log.append(verdict.frame);
-    await store.append(context.room.workspaceId, verdict.frame);
+    await store.appendFrame(context.room.workspaceId, verdict.frame);
+    await enforceRetention(context.room);
 
     const relayed = { type: "frame" as const, index, frame: verdict.frame };
     send(socket, relayed);
     for (const peer of context.room.sockets) {
       if (peer !== socket) send(peer, relayed);
     }
+  }
+
+  /** Close a retention window on a running host, not only on the next boot. */
+  async function enforceRetention(room: HostedRoom): Promise<void> {
+    const cutoff = cutoffIso(now(), retentionDays);
+    const oldest = room.log.all()[0];
+    if (oldest === undefined || oldest.receivedAt >= cutoff) return;
+    room.log.dropOlderThan(cutoff);
+    await store.compact(room.workspaceId, cutoff);
   }
 
   function handleSince(socket: WebSocket, context: SocketContext, after: number): void {
@@ -300,3 +362,6 @@ function safeJson(text: string): unknown {
     return null;
   }
 }
+
+/** Keeps the pinned-key shape visible to callers that seed a room directly. */
+export type { PinnedKey };

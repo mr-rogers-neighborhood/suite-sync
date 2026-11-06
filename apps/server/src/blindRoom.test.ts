@@ -17,9 +17,13 @@ const strangerDevice = "d".repeat(64);
 const roleVerifier: RoleVerifier = (_payload, signature, signerId) =>
   signature === `signed-by-${signerId}`;
 
-/** The device key check, stood in for: a signature names the device that made it. */
-const frameVerifier: FrameVerifier = (_payload, signature, deviceId) =>
-  signature === `signed-by-${deviceId}`;
+/** The device key check, stood in for: a signature names the key that made it. */
+const frameVerifier: FrameVerifier = (_payload, signature, publicKey) =>
+  signature === `signed-by-${publicKey}`;
+
+/** A device's pinned key, or nothing when it never joined. */
+const keyOf = (deviceId: string) =>
+  deviceId === ownerDevice ? "owner-key" : deviceId === viewerDevice ? "viewer-key" : null;
 
 function roles(): RoleState {
   const seeded = applyRoleRecord(
@@ -58,7 +62,7 @@ function frame(overrides: Partial<Frame> = {}): Frame {
     deviceId: ownerDevice,
     epoch: 1,
     payload: "AAAA",
-    signature: `signed-by-${ownerDevice}`,
+    signature: `signed-by-owner-key`,
     receivedAt: "2026-11-06T12:00:00.000Z",
     ...overrides,
   };
@@ -68,7 +72,7 @@ const host = { workspaceId, newestEpoch: null };
 
 describe("the four things a host may refuse", () => {
   it("stores a frame from an authorised device at the current epoch", () => {
-    const verdict = admitFrame(frame(), host, roles(), frameVerifier);
+    const verdict = admitFrame(frame(), host, roles(), keyOf, frameVerifier);
     expect(verdict.ok).toBe(true);
   });
 
@@ -77,6 +81,7 @@ describe("the four things a host may refuse", () => {
       frame({ workspaceId: "e".repeat(64) }),
       host,
       roles(),
+      keyOf,
       frameVerifier,
     );
     expect(verdict).toEqual({ ok: false, reason: "wrong-workspace" });
@@ -87,6 +92,7 @@ describe("the four things a host may refuse", () => {
       frame({ epoch: 2 }),
       { workspaceId, newestEpoch: 5 },
       roles(),
+      keyOf,
       frameVerifier,
     );
     expect(verdict).toEqual({ ok: false, reason: "stale-epoch" });
@@ -94,9 +100,10 @@ describe("the four things a host may refuse", () => {
 
   it("refuses a device with no role record", () => {
     const verdict = admitFrame(
-      frame({ deviceId: strangerDevice, signature: `signed-by-${strangerDevice}` }),
+      frame({ deviceId: strangerDevice, signature: "signed-by-stranger-key" }),
       host,
       roles(),
+      keyOf,
       frameVerifier,
     );
     expect(verdict).toEqual({ ok: false, reason: "not-authorized" });
@@ -104,16 +111,17 @@ describe("the four things a host may refuse", () => {
 
   it("refuses a viewer, before it looks at the signature", () => {
     const verdict = admitFrame(
-      frame({ deviceId: viewerDevice, signature: `signed-by-${viewerDevice}` }),
+      frame({ deviceId: viewerDevice, signature: "signed-by-viewer-key" }),
       host,
       roles(),
+      keyOf,
       frameVerifier,
     );
     expect(verdict).toEqual({ ok: false, reason: "not-authorized" });
   });
 
   it("refuses a signature that does not verify", () => {
-    const verdict = admitFrame(frame({ signature: "forged" }), host, roles(), frameVerifier);
+    const verdict = admitFrame(frame({ signature: "forged" }), host, roles(), keyOf, frameVerifier);
     expect(verdict).toEqual({ ok: false, reason: "invalid-signature" });
   });
 });

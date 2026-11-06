@@ -2,7 +2,7 @@
 import { pathToFileURL } from "node:url";
 import { RELAY_PROTOCOL_VERSION } from "@suite/sync";
 import { createSyncServer, HostRegistry } from "./server.js";
-import { FileFrameStore } from "./store.js";
+import { FileHostStore } from "./store.js";
 
 export const SERVER_NAME = "suite-sync";
 export const SERVER_VERSION = "0.1.0";
@@ -130,7 +130,7 @@ export async function runCli(argv: readonly string[]): Promise<CliResult> {
       registry: new HostRegistry(),
       host: parsed.value.host,
       port: parsed.value.port,
-      store: new FileFrameStore(parsed.value.store),
+      store: new FileHostStore(parsed.value.store),
       verifyFrame: () => true,
       verifyRole: () => true,
     });

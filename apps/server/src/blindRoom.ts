@@ -25,8 +25,8 @@ export type HostVerdict =
   | { readonly ok: true; readonly frame: Frame }
   | { readonly ok: false; readonly reason: HostRejection };
 
-/** Verifies a frame's signature against the sending device's key. */
-export type FrameVerifier = (payload: Uint8Array, signature: string, deviceId: string) => boolean;
+/** Verifies a frame's signature against a public key the host pinned for that device. */
+export type FrameVerifier = (payload: Uint8Array, signature: string, publicKey: string) => boolean;
 
 export interface HostWorkspace {
   readonly workspaceId: string;
@@ -45,6 +45,7 @@ export function admitFrame(
   sealed: SealedFrame,
   host: HostWorkspace,
   roles: RoleState,
+  keyOf: (deviceId: string) => string | null,
   verify: FrameVerifier,
   receivedAt: string = new Date().toISOString(),
 ): HostVerdict {
@@ -55,7 +56,8 @@ export function admitFrame(
 
   if (!mayWrite(roles, sealed.deviceId)) return { ok: false, reason: "not-authorized" };
 
-  if (!verify(framePayload(sealed), sealed.signature, sealed.deviceId)) {
+  const publicKey = keyOf(sealed.deviceId);
+  if (publicKey === null || !verify(framePayload(sealed), sealed.signature, publicKey)) {
     return { ok: false, reason: "invalid-signature" };
   }
 

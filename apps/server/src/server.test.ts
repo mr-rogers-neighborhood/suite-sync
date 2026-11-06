@@ -1,3 +1,4 @@
+import { generateKeyPairSync, sign } from "node:crypto";
 import {
   addDevice,
   applyRoleRecord,
@@ -11,26 +12,39 @@ import {
   open,
   RELAY_PROTOCOL_VERSION,
   type RelayHostMessage,
+  roleRecordPayload,
+  type SealedFrame,
   seal,
 } from "@suite/sync";
 import { describe, expect, it } from "vitest";
+import { deviceIdFromPublicKey, ed25519Verifier } from "./crypto.js";
 import { createSyncServer, HostRegistry } from "./server.js";
-import { MemoryFrameStore } from "./store.js";
+import { MemoryHostStore } from "./store.js";
 
 const workspaceId = "a".repeat(64);
-const ownerDevice = "b".repeat(64);
-const secondDevice = "c".repeat(64);
 
-const trustAll = () => true;
+/** A device with a real Ed25519 key, an id derived from it, and a way to sign. */
+function device() {
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const raw = publicKey.export({ format: "der", type: "spki" }).subarray(12);
+  const publicKeyBase64 = raw.toString("base64");
+  return {
+    deviceId: deviceIdFromPublicKey(publicKeyBase64),
+    publicKey: publicKeyBase64,
+    sign: (payload: Uint8Array | string) =>
+      sign(null, Buffer.from(payload), privateKey).toString("base64"),
+  };
+}
 
-/** A client of the relay: sends frames, collects what the host hands back. */
+const owner = device();
+const second = device();
+
+/** A client of the relay: sends messages, collects what the host hands back. */
 class RelayClient {
-  readonly socket: WebSocket;
   readonly messages: RelayHostMessage[] = [];
   private waiters: Array<() => void> = [];
 
-  private constructor(socket: WebSocket) {
-    this.socket = socket;
+  private constructor(private readonly socket: WebSocket) {
     socket.addEventListener("message", (event) => {
       this.messages.push(JSON.parse(String(event.data)) as RelayHostMessage);
       for (const waiter of this.waiters) waiter();
@@ -51,7 +65,6 @@ class RelayClient {
     this.socket.send(encodeRelayMessage(message as Parameters<typeof encodeRelayMessage>[0]));
   }
 
-  /** Wait for a message the predicate accepts, looking at everything so far. */
   async until(
     predicate: (message: RelayHostMessage) => boolean,
     timeoutMs = 2000,
@@ -73,84 +86,91 @@ class RelayClient {
   }
 }
 
-async function started() {
-  const store = new MemoryFrameStore();
+async function started(store = new MemoryHostStore()) {
   const server = await createSyncServer({
     registry: new HostRegistry(),
     port: 0,
     store,
-    verifyFrame: trustAll,
-    verifyRole: trustAll,
+    verifyFrame: ed25519Verifier,
+    verifyRole: ed25519Verifier,
     now: () => new Date("2026-11-06T12:00:00.000Z"),
   });
   return { server, store };
 }
 
-function roleFor(deviceId: string, role: "owner" | "editor" | "viewer", seq = 0) {
-  return {
+function roleRecord(
+  actor: ReturnType<typeof device>,
+  target: { deviceId: string },
+  role: "owner" | "editor" | "viewer",
+  seq = 0,
+) {
+  const unsigned = {
     workspaceId,
-    deviceId,
+    deviceId: target.deviceId,
     role,
     seq,
-    signerId: ownerDevice,
-    signature: "any",
+    signerId: actor.deviceId,
   } as const;
+  return { ...unsigned, signature: actor.sign(roleRecordPayload(unsigned)) };
+}
+
+function sealedFrame(
+  actor: ReturnType<typeof device>,
+  epoch: number,
+  payload: string,
+): SealedFrame {
+  const header = {
+    kind: "application" as const,
+    workspaceId,
+    deviceId: actor.deviceId,
+    epoch,
+    payload,
+  };
+  return { ...header, signature: actor.sign(framePayload(header)) };
+}
+
+async function joined(client: RelayClient, who: ReturnType<typeof device>) {
+  client.send({
+    type: "join",
+    protocolVersion: RELAY_PROTOCOL_VERSION,
+    workspaceId,
+    deviceId: who.deviceId,
+    publicKey: who.publicKey,
+  });
+  await client.until((m) => m.type === "joined");
 }
 
 describe("two devices through one host", () => {
   it("relays a document update the host cannot read", async () => {
     const { server, store } = await started();
-    const owner = await createDeviceIdentity("owner-laptop");
+    const ownerDevice = await createDeviceIdentity("owner-laptop");
     const joiner = await createDeviceIdentity("owner-desktop");
-    const group = await createWorkspaceGroup(workspaceId, owner);
+    const group = await createWorkspaceGroup(workspaceId, ownerDevice);
     const added = await addDevice(group, joiner.keyPackage);
-    const joined = await joinWorkspaceGroup(added.welcome, joiner);
+    const joinedGroup = await joinWorkspaceGroup(added.welcome, joiner);
 
     const alice = await RelayClient.connect(server.url);
     const bob = await RelayClient.connect(server.url);
-
-    alice.send({
-      type: "join",
-      protocolVersion: RELAY_PROTOCOL_VERSION,
-      workspaceId,
-      deviceId: ownerDevice,
-    });
-    await alice.until((m) => m.type === "joined");
-    alice.send({ type: "role", record: roleFor(ownerDevice, "owner") });
-
-    bob.send({
-      type: "join",
-      protocolVersion: RELAY_PROTOCOL_VERSION,
-      workspaceId,
-      deviceId: secondDevice,
-    });
-    await bob.until((m) => m.type === "joined");
-    bob.send({ type: "role", record: roleFor(secondDevice, "editor") });
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    await joined(bob, second);
+    bob.send({ type: "role", record: roleRecord(owner, second, "editor") });
 
     const plaintext = '{"title":"Q4 planning"}';
-    const sealedMessage = await seal(added.group, new TextEncoder().encode(plaintext));
-
+    const sealed = await seal(added.group, new TextEncoder().encode(plaintext));
     alice.send({
       type: "frame",
-      frame: {
-        kind: "application",
-        workspaceId,
-        deviceId: ownerDevice,
-        epoch: sealedMessage.group.epoch,
-        payload: encodeBase64(sealedMessage.message),
-        signature: "any",
-      },
+      frame: sealedFrame(owner, sealed.group.epoch, encodeBase64(sealed.message)),
     });
 
     const delivered = await bob.until((m) => m.type === "frame");
     if (delivered.type !== "frame") throw new Error("expected a frame");
     expect(delivered.index).toBe(0);
 
-    const opened = await open(joined, base64Bytes(delivered.frame.payload));
+    const opened = await open(joinedGroup, Buffer.from(delivered.frame.payload, "base64"));
     expect(new TextDecoder().decode(opened.plaintext ?? new Uint8Array())).toBe(plaintext);
 
-    // The host wrote the frame down and still holds no readable text.
-    const kept = JSON.stringify(await store.load(workspaceId));
+    const kept = JSON.stringify(await store.loadFrames(workspaceId));
     expect(kept).not.toContain("Q4 planning");
     expect(kept).toContain(workspaceId);
 
@@ -162,60 +182,33 @@ describe("two devices through one host", () => {
   it("refuses a viewer's frame and stores nothing", async () => {
     const { server, store } = await started();
     const alice = await RelayClient.connect(server.url);
-    alice.send({
-      type: "join",
-      protocolVersion: RELAY_PROTOCOL_VERSION,
-      workspaceId,
-      deviceId: ownerDevice,
-    });
-    await alice.until((m) => m.type === "joined");
-    alice.send({ type: "role", record: roleFor(ownerDevice, "owner") });
-    alice.send({ type: "role", record: roleFor(secondDevice, "viewer") });
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    alice.send({ type: "role", record: roleRecord(owner, second, "viewer") });
 
-    alice.send({
-      type: "frame",
-      frame: {
-        kind: "application",
-        workspaceId,
-        deviceId: secondDevice,
-        epoch: 1,
-        payload: "AAAA",
-        signature: "any",
-      },
-    });
+    const bob = await RelayClient.connect(server.url);
+    await joined(bob, second);
+    bob.send({ type: "frame", frame: sealedFrame(second, 1, "AAAA") });
 
-    const refused = await alice.until((m) => m.type === "refused");
-    expect(refused).toEqual({ type: "refused", reason: "not-authorized" });
-    expect(await store.load(workspaceId)).toHaveLength(0);
+    expect(await bob.until((m) => m.type === "refused")).toEqual({
+      type: "refused",
+      reason: "not-authorized",
+    });
+    expect(await store.loadFrames(workspaceId)).toHaveLength(0);
 
     alice.close();
+    bob.close();
     await server.close();
   });
 
   it("hands a returning device only what it has not seen", async () => {
     const { server } = await started();
     const alice = await RelayClient.connect(server.url);
-    alice.send({
-      type: "join",
-      protocolVersion: RELAY_PROTOCOL_VERSION,
-      workspaceId,
-      deviceId: ownerDevice,
-    });
-    await alice.until((m) => m.type === "joined");
-    alice.send({ type: "role", record: roleFor(ownerDevice, "owner") });
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
 
     for (const epoch of [1, 2, 3]) {
-      alice.send({
-        type: "frame",
-        frame: {
-          kind: "application",
-          workspaceId,
-          deviceId: ownerDevice,
-          epoch,
-          payload: "AAAA",
-          signature: "any",
-        },
-      });
+      alice.send({ type: "frame", frame: sealedFrame(owner, epoch, "AAAA") });
       await alice.until((m) => m.type === "frame" && m.index === epoch - 1);
     }
 
@@ -229,11 +222,85 @@ describe("two devices through one host", () => {
   });
 });
 
+describe("what the host remembers across a restart", () => {
+  it("still knows who may write after it is rebuilt from disk", async () => {
+    const store = new MemoryHostStore();
+    const first = await started(store);
+    const alice = await RelayClient.connect(first.server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    await alice.until((m) => m.type === "applied");
+    alice.close();
+    await first.server.close();
+
+    // A fresh host over the same store: without replayed roles, this frame is refused.
+    const second_ = await started(store);
+    const bob = await RelayClient.connect(second_.server.url);
+    await joined(bob, owner);
+    bob.send({ type: "frame", frame: sealedFrame(owner, 1, "AAAA") });
+
+    const answer = await bob.until((m) => m.type === "frame" || m.type === "refused");
+    expect(answer.type).toBe("frame");
+
+    bob.close();
+    await second_.server.close();
+  });
+
+  it("refuses a device id that arrives with a different key", async () => {
+    const { server } = await started();
+    const alice = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+
+    const impostor = await RelayClient.connect(server.url);
+    impostor.send({
+      type: "join",
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      workspaceId,
+      deviceId: owner.deviceId,
+      publicKey: second.publicKey,
+    });
+
+    const error = await impostor.until((m) => m.type === "error");
+    expect(error.type === "error" && error.message).toContain("pinned");
+
+    alice.close();
+    impostor.close();
+    await server.close();
+  });
+
+  it("refuses a frame signed by a key that is not the pinned one", async () => {
+    const { server } = await started();
+    const alice = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+
+    const forged: SealedFrame = {
+      ...sealedFrame(second, 1, "AAAA"),
+      deviceId: owner.deviceId,
+    };
+    alice.send({ type: "frame", frame: forged });
+
+    expect(await alice.until((m) => m.type === "refused")).toEqual({
+      type: "refused",
+      reason: "invalid-signature",
+    });
+
+    alice.close();
+    await server.close();
+  });
+});
+
 describe("the wire", () => {
   it("refuses a version it does not speak", async () => {
     const { server } = await started();
     const alice = await RelayClient.connect(server.url);
-    alice.send({ type: "join", protocolVersion: 999, workspaceId, deviceId: ownerDevice });
+    alice.send({
+      type: "join",
+      protocolVersion: 999,
+      workspaceId,
+      deviceId: owner.deviceId,
+      publicKey: owner.publicKey,
+    });
     const error = await alice.until((m) => m.type === "error");
     expect(error.type === "error" && error.code).toBe("protocol-version");
     alice.close();
@@ -243,57 +310,55 @@ describe("the wire", () => {
   it("refuses a frame from a device that never joined", async () => {
     const { server } = await started();
     const alice = await RelayClient.connect(server.url);
-    alice.send({
-      type: "frame",
-      frame: {
-        kind: "application",
-        workspaceId,
-        deviceId: ownerDevice,
-        epoch: 1,
-        payload: "AAAA",
-        signature: "any",
-      },
-    });
+    alice.send({ type: "frame", frame: sealedFrame(owner, 1, "AAAA") });
     const error = await alice.until((m) => m.type === "error");
     expect(error.type === "error" && error.code).toBe("not-joined");
     alice.close();
     await server.close();
   });
 
-  it("signs over the header so a rewritten epoch is a different message", () => {
-    const header = {
-      kind: "application" as const,
-      workspaceId,
-      deviceId: ownerDevice,
-      epoch: 1,
-      payload: "AAAA",
-    };
-    expect(
-      Buffer.from(framePayload(header)).equals(Buffer.from(framePayload({ ...header, epoch: 2 }))),
-    ).toBe(false);
+  it("tells the sender when its role record is refused, and nobody else", async () => {
+    const { server } = await started();
+    const alice = await RelayClient.connect(server.url);
+    const bob = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+    await joined(bob, second);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+
+    // Bob is not an owner, so his record for himself is refused — to Bob.
+    bob.send({ type: "role", record: roleRecord(second, second, "owner") });
+    expect(await bob.until((m) => m.type === "refused")).toEqual({
+      type: "refused",
+      reason: "not-owner",
+    });
+    expect(alice.messages.some((m) => m.type === "refused")).toBe(false);
+
+    alice.close();
+    bob.close();
+    await server.close();
   });
 });
 
-function base64Bytes(text: string): Uint8Array {
-  return Uint8Array.from(Buffer.from(text, "base64"));
-}
-
 describe("the role record a host is asked to keep", () => {
   it("applies an owner's record and refuses a second owner claim", () => {
+    // `applyRoleRecord` asks "may this signer sign", so the adapter resolves the id to a key.
+    const byDeviceId = (payload: string, signature: string, signerId: string) => {
+      const key = [owner, second].find((d) => d.deviceId === signerId)?.publicKey;
+      return key !== undefined && ed25519Verifier(payload, signature, key);
+    };
+
     const seeded = applyRoleRecord(
       createRoleState(workspaceId),
-      roleFor(ownerDevice, "owner") as Parameters<typeof applyRoleRecord>[1],
-      trustAll,
+      roleRecord(owner, owner, "owner"),
+      byDeviceId,
     );
     expect(seeded.ok).toBe(true);
 
-    const second = applyRoleRecord(
+    const second_ = applyRoleRecord(
       seeded.ok ? seeded.state : createRoleState(workspaceId),
-      { ...roleFor(secondDevice, "owner"), signerId: secondDevice } as Parameters<
-        typeof applyRoleRecord
-      >[1],
-      trustAll,
+      roleRecord(second, second, "owner"),
+      byDeviceId,
     );
-    expect(second).toEqual({ ok: false, reason: "not-owner" });
+    expect(second_).toEqual({ ok: false, reason: "not-owner" });
   });
 });

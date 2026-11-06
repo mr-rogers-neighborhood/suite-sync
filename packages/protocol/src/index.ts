@@ -55,6 +55,7 @@ export {
   parseClientMessage,
   parseHostMessage,
   RELAY_PROTOCOL_VERSION,
+  type RelayApplied,
   type RelayClientMessage,
   type RelayErrorCode,
   type RelayFrame,

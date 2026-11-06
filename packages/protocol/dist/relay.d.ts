@@ -12,6 +12,7 @@ export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObj
     protocolVersion: z.ZodNumber;
     workspaceId: z.ZodString;
     deviceId: z.ZodString;
+    publicKey: z.ZodString;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"role">;
     record: z.ZodObject<{
@@ -70,6 +71,22 @@ declare const frameOutSchema: z.ZodObject<{
         receivedAt: z.ZodString;
     }, z.core.$strict>;
 }, z.core.$strict>;
+/**
+ * A role record the host applied, echoed to the device that sent it.
+ *
+ * Without this a client cannot tell whether its role landed, and an app has to know it is
+ * an owner before it offers to invite anything.
+ */
+declare const appliedSchema: z.ZodObject<{
+    type: z.ZodLiteral<"applied">;
+    deviceId: z.ZodString;
+    role: z.ZodEnum<{
+        owner: "owner";
+        editor: "editor";
+        viewer: "viewer";
+    }>;
+    seq: z.ZodNumber;
+}, z.core.$strict>;
 export declare const relayErrorCodeSchema: z.ZodEnum<{
     unknown: "unknown";
     "protocol-version": "protocol-version";
@@ -83,6 +100,15 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
     workspaceId: z.ZodString;
     newestEpoch: z.ZodNullable<z.ZodNumber>;
     frames: z.ZodNumber;
+}, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"applied">;
+    deviceId: z.ZodString;
+    role: z.ZodEnum<{
+        owner: "owner";
+        editor: "editor";
+        viewer: "viewer";
+    }>;
+    seq: z.ZodNumber;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"frame">;
     index: z.ZodNumber;
@@ -126,6 +152,7 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
 }, z.core.$strict>], "type">;
 export type RelayHostMessage = z.infer<typeof relayHostMessageSchema>;
 export type RelayJoined = z.infer<typeof joinedSchema>;
+export type RelayApplied = z.infer<typeof appliedSchema>;
 export type RelayFrame = z.infer<typeof frameOutSchema>;
 export declare function encodeRelayMessage(message: RelayClientMessage | RelayHostMessage): string;
 export declare function parseClientMessage(value: unknown): RelayClientMessage | null;
