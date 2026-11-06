@@ -175,6 +175,25 @@ export declare const relayErrorCodeSchema: z.ZodEnum<{
     malformed: "malformed";
 }>;
 export type RelayErrorCode = z.infer<typeof relayErrorCodeSchema>;
+/**
+ * Who is in the workspace now.
+ *
+ * Sent to every socket in the room whenever a role record is applied, so a device's view of
+ * its neighbours does not depend on when it happened to join. `joined` carries the same list
+ * for the moment of joining; this is what keeps it true afterwards.
+ */
+declare const rosterSchema: z.ZodObject<{
+    type: z.ZodLiteral<"roster">;
+    members: z.ZodArray<z.ZodObject<{
+        deviceId: z.ZodString;
+        name: z.ZodString;
+        role: z.ZodEnum<{
+            owner: "owner";
+            editor: "editor";
+            viewer: "viewer";
+        }>;
+    }, z.core.$strict>>;
+}, z.core.$strict>;
 export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     type: z.ZodLiteral<"joined">;
     protocolVersion: z.ZodNumber;
@@ -212,6 +231,17 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
         editor: "editor";
         viewer: "viewer";
     }>;
+}, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"roster">;
+    members: z.ZodArray<z.ZodObject<{
+        deviceId: z.ZodString;
+        name: z.ZodString;
+        role: z.ZodEnum<{
+            owner: "owner";
+            editor: "editor";
+            viewer: "viewer";
+        }>;
+    }, z.core.$strict>>;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"frame">;
     index: z.ZodNumber;
@@ -265,6 +295,7 @@ export type RelayHostMessage = z.infer<typeof relayHostMessageSchema>;
 export type RelayJoined = z.infer<typeof joinedSchema>;
 export type RelayApplied = z.infer<typeof appliedSchema>;
 export type RelayWaiting = z.infer<typeof waitingSchema>;
+export type RelayRoster = z.infer<typeof rosterSchema>;
 export type RelayMember = z.infer<typeof memberSchema>;
 export type RelayFrame = z.infer<typeof frameOutSchema>;
 export declare function encodeRelayMessage(message: RelayClientMessage | RelayHostMessage): string;

@@ -87,6 +87,7 @@ export {
   type RelayHostMessage,
   type RelayJoined,
   type RelayMember,
+  type RelayRoster,
   type RelayWaiting,
   relayClientMessageSchema,
   relayErrorCodeSchema,

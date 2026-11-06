@@ -1,4 +1,4 @@
-import { type InviteState, type RoleState, type RoleVerifier } from "@suite/sync";
+import { type InviteState, type MemberRole, type RoleState, type RoleVerifier } from "@suite/sync";
 import { WebSocket } from "ws";
 import { FrameLog, type FrameVerifier } from "./blindRoom.js";
 import { type HostStore, type PinnedKey } from "./store.js";
@@ -18,11 +18,16 @@ export interface HostedRoom {
      * Each device's key and the name it introduced itself with.
      *
      * The key is what makes verification possible after a restart; the name is what makes the
-     * device recognisable to the person deciding whether to let it in.
+     * device recognisable to the person deciding whether to let it in, and the invitation it
+     * spent is what answers "as what".
      */
     readonly keys: Map<string, {
         readonly publicKey: string;
         readonly name: string;
+        readonly invitedWith?: {
+            readonly inviteId: string;
+            readonly role: MemberRole;
+        };
     }>;
     readonly sockets: Set<WebSocket>;
 }

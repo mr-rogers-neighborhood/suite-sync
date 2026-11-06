@@ -214,12 +214,57 @@ describe("an invited device may ask to join", () => {
       role: "viewer",
     });
 
+    // The announcement comes before the key package it describes, because the owner writes
+    // the role record the moment it sees the device: a role that arrived after the frame
+    // would leave it guessing, which is what this message exists to end.
+    const order = alice.messages.map((m) => m.type);
+    expect(order.indexOf("waiting")).toBeLessThan(order.indexOf("frame"));
+
     // The device asking hears nothing about itself: it is the answer to somebody else's
     // question, and a second copy on the same screen would be a second thing to explain.
     expect(bob.messages.some((m) => m.type === "waiting")).toBe(false);
 
     bob.close();
     alice.close();
+    await server.close();
+  });
+
+  it("remembers a device that asked while the person adding it was away", async () => {
+    const { server, alice } = await started();
+    alice.send({ type: "invite", record: inviteRecord() });
+    await alice.until((m) => m.type === "invited");
+    // The person who owns the workspace closes the app. The invitation is still live.
+    alice.close();
+
+    const bob = await Client.connect(server.url);
+    bob.send({
+      type: "join",
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      workspaceId,
+      deviceId: stranger.deviceId,
+      publicKey: stranger.publicKey,
+      name: "a test device",
+    });
+    await bob.until((m) => m.type === "joined");
+    bob.send(await keyPackageMessage(stranger));
+    await bob.until((m) => m.type === "frame");
+    bob.close();
+
+    // They come back. The invitation was spent while they were gone, so without a memory of
+    // who spent it the key package would replay forever and nothing would ever happen.
+    const back = await Client.connect(server.url);
+    back.send({
+      type: "join",
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      workspaceId,
+      deviceId: owner.deviceId,
+      publicKey: owner.publicKey,
+      name: "a test device",
+    });
+    const waiting = await back.until((m) => m.type === "waiting");
+    expect(waiting).toMatchObject({ deviceId: stranger.deviceId, role: "editor" });
+
+    back.close();
     await server.close();
   });
 

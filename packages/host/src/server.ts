@@ -9,6 +9,7 @@ import {
   type InviteState,
   isRelayCompatible,
   liveInvite,
+  type MemberRole,
   parseClientMessage,
   RELAY_PROTOCOL_VERSION,
   type RelayClientMessage,
@@ -38,9 +39,17 @@ export interface HostedRoom {
    * Each device's key and the name it introduced itself with.
    *
    * The key is what makes verification possible after a restart; the name is what makes the
-   * device recognisable to the person deciding whether to let it in.
+   * device recognisable to the person deciding whether to let it in, and the invitation it
+   * spent is what answers "as what".
    */
-  readonly keys: Map<string, { readonly publicKey: string; readonly name: string }>;
+  readonly keys: Map<
+    string,
+    {
+      readonly publicKey: string;
+      readonly name: string;
+      readonly invitedWith?: { readonly inviteId: string; readonly role: MemberRole };
+    }
+  >;
   readonly sockets: Set<WebSocket>;
 }
 
@@ -150,7 +159,11 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       room.log.dropOlderThan(cutoffIso(now(), retentionDays));
 
       for (const key of await store.loadKeys(workspaceId)) {
-        room.keys.set(key.deviceId, { publicKey: key.publicKey, name: key.name });
+        room.keys.set(key.deviceId, {
+          publicKey: key.publicKey,
+          name: key.name,
+          ...(key.invitedWith === undefined ? {} : { invitedWith: key.invitedWith }),
+        });
       }
       for (const record of await store.loadRoles(workspaceId)) {
         const applied = applyRoleRecord(room.roles, record, roleVerifierFor(room));
@@ -261,6 +274,21 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       frames: room.log.length,
       members: rosterOf(room),
     });
+
+    // Anyone who asked to be let in while nobody was listening. A key package is replayed from
+    // the log on every connect, but the invitation that authorised it was announced once, to
+    // whoever happened to be connected; this is what makes a join that waited resume instead
+    // of stalling in silence.
+    for (const [deviceId, key] of room.keys) {
+      if (key.invitedWith === undefined || room.roles.roles[deviceId] !== undefined) continue;
+      send(socket, {
+        type: "waiting",
+        deviceId,
+        name: key.name,
+        inviteId: key.invitedWith.inviteId,
+        role: key.invitedWith.role,
+      });
+    }
   }
 
   /**
@@ -332,14 +360,20 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       return;
     }
 
-    if (pinned === undefined) {
-      context.room.keys.set(message.deviceId, { publicKey: message.publicKey, name: message.name });
-      await store.appendKey(context.room.workspaceId, {
-        deviceId: message.deviceId,
-        publicKey: message.publicKey,
-        name: message.name,
-      });
-    }
+    // Pinned here as well as on `join`, because this is the message that says which invitation
+    // the device spent. `join` cannot know: it arrives before the invitation is presented.
+    const invitedWith = { inviteId: live.record.inviteId, role: live.record.role };
+    context.room.keys.set(message.deviceId, {
+      publicKey: message.publicKey,
+      name: message.name,
+      invitedWith,
+    });
+    await store.appendKey(context.room.workspaceId, {
+      deviceId: message.deviceId,
+      publicKey: message.publicKey,
+      name: message.name,
+      invitedWith,
+    });
 
     const verdict = admitFrame(
       message.frame,
@@ -364,16 +398,14 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     context.room.log.append(verdict.frame);
     await store.appendFrame(context.room.workspaceId, verdict.frame);
 
-    const relayed = { type: "frame" as const, index, frame: verdict.frame };
-    send(socket, relayed);
-    for (const peer of context.room.sockets) {
-      if (peer !== socket) send(peer, relayed);
-    }
-
     // The invitation decided who this device is and what it may do, and the person adding it
     // cannot ask: the invitation may have been written by somebody else. The host read it to
     // decide whether to honour it, so it is the only party that can answer — and the token is
     // spent by now, so there is nothing left to leak.
+    //
+    // This goes out before the key package itself, because a device is added with the role its
+    // invitation promised: announce afterwards and the owner would have to hold the frame
+    // back or guess.
     const waiting = {
       type: "waiting" as const,
       deviceId: message.deviceId,
@@ -383,6 +415,12 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     };
     for (const peer of context.room.sockets) {
       if (peer !== socket) send(peer, waiting);
+    }
+
+    const relayed = { type: "frame" as const, index, frame: verdict.frame };
+    send(socket, relayed);
+    for (const peer of context.room.sockets) {
+      if (peer !== socket) send(peer, relayed);
     }
   }
 
@@ -405,6 +443,11 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       role: record.role,
       seq: record.seq,
     });
+
+    // Everybody's idea of who is here just changed, and a device's list of its neighbours is
+    // the thing a person makes decisions from. This is the same three fields `joined` carries.
+    const roster = { type: "roster" as const, members: rosterOf(context.room) };
+    for (const peer of context.room.sockets) send(peer, roster);
   }
 
   async function handleFrame(

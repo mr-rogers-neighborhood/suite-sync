@@ -191,11 +191,23 @@ const errorSchema = z
   })
   .strict();
 
+/**
+ * Who is in the workspace now.
+ *
+ * Sent to every socket in the room whenever a role record is applied, so a device's view of
+ * its neighbours does not depend on when it happened to join. `joined` carries the same list
+ * for the moment of joining; this is what keeps it true afterwards.
+ */
+const rosterSchema = z
+  .object({ type: z.literal("roster"), members: z.array(memberSchema) })
+  .strict();
+
 export const relayHostMessageSchema = z.discriminatedUnion("type", [
   joinedSchema,
   appliedSchema,
   invitedSchema,
   waitingSchema,
+  rosterSchema,
   frameOutSchema,
   refusedSchema,
   errorSchema,
@@ -205,6 +217,7 @@ export type RelayHostMessage = z.infer<typeof relayHostMessageSchema>;
 export type RelayJoined = z.infer<typeof joinedSchema>;
 export type RelayApplied = z.infer<typeof appliedSchema>;
 export type RelayWaiting = z.infer<typeof waitingSchema>;
+export type RelayRoster = z.infer<typeof rosterSchema>;
 export type RelayMember = z.infer<typeof memberSchema>;
 export type RelayFrame = z.infer<typeof frameOutSchema>;
 

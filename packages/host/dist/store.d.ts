@@ -1,4 +1,4 @@
-import { type Frame, type InviteRecord, type RoleRecord } from "@suite/sync";
+import { type Frame, type InviteRecord, type MemberRole, type RoleRecord } from "@suite/sync";
 /**
  * What a host keeps between process lifetimes: frames, and who may write.
  *
@@ -28,6 +28,18 @@ export interface PinnedKey {
     readonly publicKey: string;
     /** The name the device introduced itself with. */
     readonly name: string;
+    /**
+     * The invitation this device spent, if it spent one, and the role that invitation granted.
+     *
+     * Kept because the person adding the device may not have been connected when it asked, and
+     * the invitation is spent the moment the key package lands. Without this a join that waited
+     * for the owner would wait forever, and the honest answer to "why is it stuck" would be
+     * "nobody remembers what it asked for".
+     */
+    readonly invitedWith?: {
+        readonly inviteId: string;
+        readonly role: MemberRole;
+    };
 }
 export declare class MemoryHostStore implements HostStore {
     private readonly frames;

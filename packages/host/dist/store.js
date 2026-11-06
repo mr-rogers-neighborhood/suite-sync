@@ -1,6 +1,6 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { frameSchema, inviteRecordSchema, roleRecordSchema, } from "@suite/sync";
+import { frameSchema, inviteRecordSchema, memberRoleSchema, roleRecordSchema, } from "@suite/sync";
 export class MemoryHostStore {
     frames = new Map();
     invites = new Map();
@@ -131,7 +131,22 @@ function pinnedKey(value) {
     if (typeof record.deviceId !== "string" || typeof record.publicKey !== "string")
         return undefined;
     const name = typeof record.name === "string" && record.name.length > 0 ? record.name : "a device";
-    return { deviceId: record.deviceId, publicKey: record.publicKey, name };
+    return {
+        deviceId: record.deviceId,
+        publicKey: record.publicKey,
+        name,
+        ...(invitedWith(record.invitedWith) ?? {}),
+    };
+}
+/** The invitation a device spent, when the file still has one it can read. */
+function invitedWith(value) {
+    if (typeof value !== "object" || value === null)
+        return undefined;
+    const record = value;
+    const role = memberRoleSchema.safeParse(record.role);
+    if (typeof record.inviteId !== "string" || !role.success)
+        return undefined;
+    return { invitedWith: { inviteId: record.inviteId, role: role.data } };
 }
 function safeJson(line) {
     try {

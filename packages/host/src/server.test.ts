@@ -220,6 +220,16 @@ describe("two devices through one host", () => {
       members: [{ deviceId: owner.deviceId, name: "a test device", role: "owner" }],
     });
 
+    // And it hears the list change, rather than keeping the one it arrived with: a device
+    // that joined an hour ago has just as much need to know it is not alone.
+    alice.send({ type: "role", record: roleRecord(owner, second, "editor") });
+    const roster = await bob.until((message) => message.type === "roster");
+    expect(roster.type === "roster" && roster.members).toHaveLength(2);
+    expect(roster.type === "roster" && roster.members.map((member) => member.role).sort()).toEqual([
+      "editor",
+      "owner",
+    ]);
+
     alice.close();
     bob.close();
     await server.close();

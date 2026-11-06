@@ -5,6 +5,8 @@ import {
   frameSchema,
   type InviteRecord,
   inviteRecordSchema,
+  type MemberRole,
+  memberRoleSchema,
   type RoleRecord,
   roleRecordSchema,
 } from "@suite/sync";
@@ -39,6 +41,15 @@ export interface PinnedKey {
   readonly publicKey: string;
   /** The name the device introduced itself with. */
   readonly name: string;
+  /**
+   * The invitation this device spent, if it spent one, and the role that invitation granted.
+   *
+   * Kept because the person adding the device may not have been connected when it asked, and
+   * the invitation is spent the moment the key package lands. Without this a join that waited
+   * for the owner would wait forever, and the honest answer to "why is it stuck" would be
+   * "nobody remembers what it asked for".
+   */
+  readonly invitedWith?: { readonly inviteId: string; readonly role: MemberRole };
 }
 
 export class MemoryHostStore implements HostStore {
@@ -196,7 +207,21 @@ function pinnedKey(value: unknown): PinnedKey | undefined {
   const record = value as Record<string, unknown>;
   if (typeof record.deviceId !== "string" || typeof record.publicKey !== "string") return undefined;
   const name = typeof record.name === "string" && record.name.length > 0 ? record.name : "a device";
-  return { deviceId: record.deviceId, publicKey: record.publicKey, name };
+  return {
+    deviceId: record.deviceId,
+    publicKey: record.publicKey,
+    name,
+    ...(invitedWith(record.invitedWith) ?? {}),
+  };
+}
+
+/** The invitation a device spent, when the file still has one it can read. */
+function invitedWith(value: unknown): Pick<PinnedKey, "invitedWith"> | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const record = value as Record<string, unknown>;
+  const role = memberRoleSchema.safeParse(record.role);
+  if (typeof record.inviteId !== "string" || !role.success) return undefined;
+  return { invitedWith: { inviteId: record.inviteId, role: role.data } };
 }
 
 function safeJson(line: string): unknown {

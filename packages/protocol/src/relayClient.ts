@@ -7,6 +7,7 @@ import {
   type RelayFrame,
   type RelayHostMessage,
   type RelayJoined,
+  type RelayRoster,
   type RelayWaiting,
 } from "./relay.js";
 import type { RoleRecord } from "./roleRecord.js";
@@ -48,6 +49,8 @@ export interface RelayClientHandlers {
   readonly onFrame: (index: number, frame: RelayFrame["frame"]) => void;
   /** A device asked to join with an invitation, and this is the invitation it spent. */
   readonly onWaiting: (waiting: RelayWaiting) => void;
+  /** The list of who is here and what each of them may do, whenever it changes. */
+  readonly onRoster: (roster: RelayRoster) => void;
   readonly onRefused: (reason: string) => void;
   readonly onError: (code: string, message: string) => void;
   readonly onClosed: () => void;
@@ -134,6 +137,9 @@ function dispatch(message: RelayHostMessage, handlers: RelayClientHandlers): voi
       return;
     case "waiting":
       handlers.onWaiting(message);
+      return;
+    case "roster":
+      handlers.onRoster(message);
       return;
     case "frame":
       handlers.onFrame(message.index, message.frame);
