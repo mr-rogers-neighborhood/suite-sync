@@ -1,0 +1,25 @@
+{
+  "name": "suite-sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@12.13.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "pnpm -r --workspace-concurrency=1 run build",
+    "check": "biome check . && pnpm build && pnpm typecheck && vitest run",
+    "format": "biome format --write .",
+    "lint": "biome check .",
+    "test": "vitest run",
+    "typecheck": "pnpm -r --workspace-concurrency=1 run typecheck",
+    "verify": "pnpm check"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.5",
+    "@types/node": "^24.10.0",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.5"
+  }
+}
