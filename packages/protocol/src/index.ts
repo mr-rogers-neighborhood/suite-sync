@@ -57,6 +57,7 @@ export {
   isVersionVectorEmpty,
   mergeVersionVector,
   parseSyncMessage,
+  SERVER_DEVICE_ID,
   type SyncAck,
   type SyncError,
   type SyncErrorCode,

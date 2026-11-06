@@ -5,6 +5,7 @@ import {
   encodeBase64,
   encodeSyncMessage,
   isProtocolCompatible,
+  SERVER_DEVICE_ID,
   SYNC_PROTOCOL_VERSION,
   type SyncErrorCode,
   type SyncHello,
@@ -14,8 +15,7 @@ import { type RawData, WebSocket, WebSocketServer } from "ws";
 import type { RoomRejection, SyncRoom } from "./room.js";
 import { MemoryRoomStore, type RoomStore } from "./store.js";
 
-/** A stable id for updates the server itself originates. */
-export const SERVER_DEVICE_ID = "0".repeat(64);
+export { SERVER_DEVICE_ID };
 
 export class RoomRegistry {
   private readonly rooms = new Map<string, SyncRoom>();

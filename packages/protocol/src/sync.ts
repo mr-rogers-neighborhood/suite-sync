@@ -1,6 +1,9 @@
 import { z } from "zod";
 import { deviceIdSchema, memberIdSchema, workspaceIdSchema } from "./ids.js";
 
+/** The device id the server uses for updates it originates. */
+export const SERVER_DEVICE_ID = "0".repeat(64);
+
 /**
  * A version vector names each Loro peer and the highest counter this side has
  * seen. Two peers exchange vectors, then each sends the updates the other is

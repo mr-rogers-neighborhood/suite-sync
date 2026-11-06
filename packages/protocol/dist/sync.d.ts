@@ -1,4 +1,6 @@
 import { z } from "zod";
+/** The device id the server uses for updates it originates. */
+export declare const SERVER_DEVICE_ID: string;
 /**
  * A version vector names each Loro peer and the highest counter this side has
  * seen. Two peers exchange vectors, then each sends the updates the other is
