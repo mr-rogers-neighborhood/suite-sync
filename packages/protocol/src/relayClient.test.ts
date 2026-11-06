@@ -70,6 +70,7 @@ describe("the client announces itself", () => {
       workspaceId,
       deviceId,
       publicKey: "a2V5",
+      name: "a test device",
     });
   });
 
