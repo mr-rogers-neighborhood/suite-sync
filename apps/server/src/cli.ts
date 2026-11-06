@@ -2,6 +2,7 @@
 import { pathToFileURL } from "node:url";
 import { type MemberRole, SYNC_PROTOCOL_VERSION } from "@suite/sync";
 import { createSyncServer, RoomRegistry } from "./server.js";
+import { WorkspaceDirectoryStore } from "./store.js";
 import { loadWorkspace } from "./workspace.js";
 import {
   addWorkspaceMember,
@@ -141,12 +142,16 @@ export function parseServeOptions(argv: readonly string[]): ServeOptionsParse {
 /** Start the server and keep the process alive until SIGINT or SIGTERM. */
 export async function serve(options: ServeOptions): Promise<void> {
   const registry = new RoomRegistry();
+  const directories = new Map<string, string>();
   for (const directory of options.workspaces) {
-    registry.add(await loadWorkspace(directory));
+    const room = await loadWorkspace(directory);
+    registry.add(room);
+    directories.set(room.workspaceId, directory);
   }
 
   const server = await createSyncServer({
     registry,
+    store: new WorkspaceDirectoryStore(directories),
     host: options.host,
     port: options.port,
   });

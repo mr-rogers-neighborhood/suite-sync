@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { workspaceFiles } from "./workspace.js";
 
 /**
  * Where a room's bytes live between process lifetimes.
@@ -59,6 +60,42 @@ export class FileRoomStore implements RoomStore {
 
   private pathFor(workspaceId: string): string {
     return join(this.directory, `${workspaceId}.snapshot`);
+  }
+}
+
+/**
+ * The `serve` store: each workspace keeps its snapshot beside its
+ * `membership.json`, not in one flat directory keyed by id. The CLI has the
+ * directories; this maps a room id back to the directory it came from.
+ */
+export class WorkspaceDirectoryStore implements RoomStore {
+  private readonly directories: ReadonlyMap<string, string>;
+
+  constructor(directories: ReadonlyMap<string, string>) {
+    this.directories = directories;
+  }
+
+  async load(workspaceId: string): Promise<Uint8Array | null> {
+    const directory = this.directories.get(workspaceId);
+    if (directory === undefined) return null;
+    try {
+      return new Uint8Array(await readFile(workspaceFiles(directory).snapshot));
+    } catch (error) {
+      if (isMissingFile(error)) return null;
+      throw error;
+    }
+  }
+
+  async save(workspaceId: string, snapshot: Uint8Array): Promise<void> {
+    const directory = this.directories.get(workspaceId);
+    if (directory === undefined) {
+      throw new Error(`no workspace directory for ${workspaceId}`);
+    }
+    await mkdir(directory, { recursive: true });
+    const target = workspaceFiles(directory).snapshot;
+    const temporary = `${target}.${process.pid}.${Date.now()}.tmp`;
+    await writeFile(temporary, snapshot);
+    await rename(temporary, target);
   }
 }
 
