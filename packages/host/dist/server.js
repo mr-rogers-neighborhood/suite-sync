@@ -68,8 +68,9 @@ export async function createSyncServer(options) {
             for (const frame of await store.loadFrames(workspaceId))
                 room.log.append(frame);
             room.log.dropOlderThan(cutoffIso(now(), retentionDays));
-            for (const key of await store.loadKeys(workspaceId))
-                room.keys.set(key.deviceId, key.publicKey);
+            for (const key of await store.loadKeys(workspaceId)) {
+                room.keys.set(key.deviceId, { publicKey: key.publicKey, name: key.name });
+            }
             for (const record of await store.loadRoles(workspaceId)) {
                 const applied = applyRoleRecord(room.roles, record, roleVerifierFor(room));
                 if (applied.ok)
@@ -89,7 +90,7 @@ export async function createSyncServer(options) {
     function roleVerifierFor(room) {
         return (payload, signature, signerId) => {
             const key = room.keys.get(signerId);
-            return key !== undefined && options.verifyRole(payload, signature, key);
+            return key !== undefined && options.verifyRole(payload, signature, key.publicKey);
         };
     }
     wss.on("connection", (socket) => {
@@ -146,17 +147,18 @@ export async function createSyncServer(options) {
         }
         const room = await roomFor(message.workspaceId);
         const pinned = room.keys.get(message.deviceId);
-        if (pinned !== undefined && pinned !== message.publicKey) {
+        if (pinned !== undefined && pinned.publicKey !== message.publicKey) {
             // The same device id with a different key is either a reinstall or an impersonation.
             // Either way the host cannot tell them apart, so it refuses rather than pick.
             sendError(socket, "unknown", "that device id is already pinned to another key");
             return;
         }
         if (pinned === undefined) {
-            room.keys.set(message.deviceId, message.publicKey);
+            room.keys.set(message.deviceId, { publicKey: message.publicKey, name: message.name });
             await store.appendKey(message.workspaceId, {
                 deviceId: message.deviceId,
                 publicKey: message.publicKey,
+                name: message.name,
             });
         }
         contexts.set(socket, { room, deviceId: message.deviceId });
@@ -200,18 +202,19 @@ export async function createSyncServer(options) {
             return;
         }
         const pinned = context.room.keys.get(message.deviceId);
-        if (pinned !== undefined && pinned !== message.publicKey) {
+        if (pinned !== undefined && pinned.publicKey !== message.publicKey) {
             sendError(socket, "unknown", "that device id is already pinned to another key");
             return;
         }
         if (pinned === undefined) {
-            context.room.keys.set(message.deviceId, message.publicKey);
+            context.room.keys.set(message.deviceId, { publicKey: message.publicKey, name: message.name });
             await store.appendKey(context.room.workspaceId, {
                 deviceId: message.deviceId,
                 publicKey: message.publicKey,
+                name: message.name,
             });
         }
-        const verdict = admitFrame(message.frame, { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch }, context.room.roles, (deviceId) => context.room.keys.get(deviceId) ?? null, options.verifyFrame, now().toISOString(), 
+        const verdict = admitFrame(message.frame, { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch }, context.room.roles, (deviceId) => context.room.keys.get(deviceId)?.publicKey ?? null, options.verifyFrame, now().toISOString(), 
         // The invite is the authorisation, not a role record: this device has no role yet.
         { kindAllowedWithoutRole: "keypackage" });
         if (!verdict.ok) {
@@ -247,7 +250,7 @@ export async function createSyncServer(options) {
         });
     }
     async function handleFrame(socket, context, sealed) {
-        const verdict = admitFrame(sealed, { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch }, context.room.roles, (deviceId) => context.room.keys.get(deviceId) ?? null, options.verifyFrame, now().toISOString());
+        const verdict = admitFrame(sealed, { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch }, context.room.roles, (deviceId) => context.room.keys.get(deviceId)?.publicKey ?? null, options.verifyFrame, now().toISOString());
         if (!verdict.ok) {
             send(socket, { type: "refused", reason: verdict.reason });
             return;

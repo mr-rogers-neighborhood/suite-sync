@@ -13,6 +13,7 @@ export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObj
     workspaceId: z.ZodString;
     deviceId: z.ZodString;
     publicKey: z.ZodString;
+    name: z.ZodString;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"invite">;
     record: z.ZodObject<{
@@ -32,6 +33,7 @@ export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObj
     inviteId: z.ZodString;
     deviceId: z.ZodString;
     publicKey: z.ZodString;
+    name: z.ZodString;
     frame: z.ZodObject<{
         kind: z.ZodEnum<{
             keypackage: "keypackage";

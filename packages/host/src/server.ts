@@ -33,8 +33,13 @@ export interface HostedRoom {
   roles: RoleState;
   /** Invitations an owner wrote. A live one lets exactly one key package through. */
   invites: InviteState;
-  /** The key each device joined with. Without it a restart could verify nothing. */
-  readonly keys: Map<string, string>;
+  /**
+   * Each device's key and the name it introduced itself with.
+   *
+   * The key is what makes verification possible after a restart; the name is what makes the
+   * device recognisable to the person deciding whether to let it in.
+   */
+  readonly keys: Map<string, { readonly publicKey: string; readonly name: string }>;
   readonly sockets: Set<WebSocket>;
 }
 
@@ -143,8 +148,9 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       for (const frame of await store.loadFrames(workspaceId)) room.log.append(frame);
       room.log.dropOlderThan(cutoffIso(now(), retentionDays));
 
-      for (const key of await store.loadKeys(workspaceId))
-        room.keys.set(key.deviceId, key.publicKey);
+      for (const key of await store.loadKeys(workspaceId)) {
+        room.keys.set(key.deviceId, { publicKey: key.publicKey, name: key.name });
+      }
       for (const record of await store.loadRoles(workspaceId)) {
         const applied = applyRoleRecord(room.roles, record, roleVerifierFor(room));
         if (applied.ok) room.roles = applied.state;
@@ -165,7 +171,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
   function roleVerifierFor(room: HostedRoom): RoleVerifier {
     return (payload, signature, signerId) => {
       const key = room.keys.get(signerId);
-      return key !== undefined && options.verifyRole(payload, signature, key);
+      return key !== undefined && options.verifyRole(payload, signature, key.publicKey);
     };
   }
 
@@ -228,17 +234,18 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
 
     const room = await roomFor(message.workspaceId);
     const pinned = room.keys.get(message.deviceId);
-    if (pinned !== undefined && pinned !== message.publicKey) {
+    if (pinned !== undefined && pinned.publicKey !== message.publicKey) {
       // The same device id with a different key is either a reinstall or an impersonation.
       // Either way the host cannot tell them apart, so it refuses rather than pick.
       sendError(socket, "unknown", "that device id is already pinned to another key");
       return;
     }
     if (pinned === undefined) {
-      room.keys.set(message.deviceId, message.publicKey);
+      room.keys.set(message.deviceId, { publicKey: message.publicKey, name: message.name });
       await store.appendKey(message.workspaceId, {
         deviceId: message.deviceId,
         publicKey: message.publicKey,
+        name: message.name,
       });
     }
 
@@ -301,16 +308,17 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     }
 
     const pinned = context.room.keys.get(message.deviceId);
-    if (pinned !== undefined && pinned !== message.publicKey) {
+    if (pinned !== undefined && pinned.publicKey !== message.publicKey) {
       sendError(socket, "unknown", "that device id is already pinned to another key");
       return;
     }
 
     if (pinned === undefined) {
-      context.room.keys.set(message.deviceId, message.publicKey);
+      context.room.keys.set(message.deviceId, { publicKey: message.publicKey, name: message.name });
       await store.appendKey(context.room.workspaceId, {
         deviceId: message.deviceId,
         publicKey: message.publicKey,
+        name: message.name,
       });
     }
 
@@ -318,7 +326,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       message.frame,
       { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch },
       context.room.roles,
-      (deviceId) => context.room.keys.get(deviceId) ?? null,
+      (deviceId) => context.room.keys.get(deviceId)?.publicKey ?? null,
       options.verifyFrame,
       now().toISOString(),
       // The invite is the authorisation, not a role record: this device has no role yet.
@@ -374,7 +382,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       sealed,
       { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch },
       context.room.roles,
-      (deviceId) => context.room.keys.get(deviceId) ?? null,
+      (deviceId) => context.room.keys.get(deviceId)?.publicKey ?? null,
       options.verifyFrame,
       now().toISOString(),
     );

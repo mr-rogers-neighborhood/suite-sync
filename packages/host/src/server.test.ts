@@ -136,6 +136,7 @@ async function joined(client: RelayClient, who: ReturnType<typeof device>) {
     workspaceId,
     deviceId: who.deviceId,
     publicKey: who.publicKey,
+    name: "a test device",
   });
   await client.until((m) => m.type === "joined");
 }
@@ -258,6 +259,7 @@ describe("what the host remembers across a restart", () => {
       workspaceId,
       deviceId: owner.deviceId,
       publicKey: second.publicKey,
+      name: "a test device",
     });
 
     const error = await impostor.until((m) => m.type === "error");
@@ -300,6 +302,7 @@ describe("the wire", () => {
       workspaceId,
       deviceId: owner.deviceId,
       publicKey: owner.publicKey,
+      name: "a test device",
     });
     const error = await alice.until((m) => m.type === "error");
     expect(error.type === "error" && error.code).toBe("protocol-version");

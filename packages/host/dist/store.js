@@ -130,7 +130,8 @@ function pinnedKey(value) {
     const record = value;
     if (typeof record.deviceId !== "string" || typeof record.publicKey !== "string")
         return undefined;
-    return { deviceId: record.deviceId, publicKey: record.publicKey };
+    const name = typeof record.name === "string" && record.name.length > 0 ? record.name : "a device";
+    return { deviceId: record.deviceId, publicKey: record.publicKey, name };
 }
 function safeJson(line) {
     try {

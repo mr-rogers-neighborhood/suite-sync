@@ -14,8 +14,16 @@ export interface HostedRoom {
     roles: RoleState;
     /** Invitations an owner wrote. A live one lets exactly one key package through. */
     invites: InviteState;
-    /** The key each device joined with. Without it a restart could verify nothing. */
-    readonly keys: Map<string, string>;
+    /**
+     * Each device's key and the name it introduced itself with.
+     *
+     * The key is what makes verification possible after a restart; the name is what makes the
+     * device recognisable to the person deciding whether to let it in.
+     */
+    readonly keys: Map<string, {
+        readonly publicKey: string;
+        readonly name: string;
+    }>;
     readonly sockets: Set<WebSocket>;
 }
 export declare class HostRegistry {

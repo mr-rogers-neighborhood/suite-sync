@@ -89,6 +89,7 @@ async function started() {
     workspaceId,
     deviceId: owner.deviceId,
     publicKey: owner.publicKey,
+    name: "a test device",
   });
   await alice.until((m) => m.type === "joined");
 
@@ -133,6 +134,7 @@ function keyPackageMessage(actor: ReturnType<typeof device>) {
       inviteId,
       deviceId: actor.deviceId,
       publicKey: actor.publicKey,
+      name: "a test device",
       frame: sealedFrameSchema.parse({ ...header, signature: actor.sign(framePayload(header)) }),
     };
   });
@@ -151,6 +153,7 @@ describe("an invited device may ask to join", () => {
       workspaceId,
       deviceId: stranger.deviceId,
       publicKey: stranger.publicKey,
+      name: "a test device",
     });
     await bob.until((m) => m.type === "joined");
     bob.send(await keyPackageMessage(stranger));
@@ -166,6 +169,7 @@ describe("an invited device may ask to join", () => {
       workspaceId,
       deviceId: carl.deviceId,
       publicKey: carl.publicKey,
+      name: "a test device",
     });
     await second.until((m) => m.type === "joined");
     second.send(await keyPackageMessage(carl));
@@ -188,6 +192,7 @@ describe("an invited device may ask to join", () => {
       workspaceId,
       deviceId: stranger.deviceId,
       publicKey: stranger.publicKey,
+      name: "a test device",
     });
     await bob.until((m) => m.type === "joined");
     bob.send(await keyPackageMessage(stranger));
@@ -238,6 +243,7 @@ describe("an invited device may ask to join", () => {
       workspaceId,
       deviceId: stranger.deviceId,
       publicKey: stranger.publicKey,
+      name: "a test device",
     });
     await bob.until((m) => m.type === "joined");
     const header = {

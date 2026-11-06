@@ -26,6 +26,8 @@ export interface HostStore {
 export interface PinnedKey {
     readonly deviceId: string;
     readonly publicKey: string;
+    /** The name the device introduced itself with. */
+    readonly name: string;
 }
 export declare class MemoryHostStore implements HostStore {
     private readonly frames;

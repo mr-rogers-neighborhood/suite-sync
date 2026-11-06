@@ -107,11 +107,15 @@ describe("what the host must not forget", () => {
   it("keeps the key each device joined with", async () => {
     const directory = await folder();
     const store = new FileHostStore(directory);
-    await store.appendKey(workspaceId, { deviceId: "b".repeat(64), publicKey: "a2V5" });
+    await store.appendKey(workspaceId, {
+      deviceId: "b".repeat(64),
+      publicKey: "a2V5",
+      name: "the laptop",
+    });
 
     const reopened = new FileHostStore(directory);
     expect(await reopened.loadKeys(workspaceId)).toEqual([
-      { deviceId: "b".repeat(64), publicKey: "a2V5" },
+      { deviceId: "b".repeat(64), publicKey: "a2V5", name: "the laptop" },
     ]);
   });
 

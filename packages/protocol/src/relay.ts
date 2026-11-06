@@ -29,6 +29,13 @@ const joinSchema = z
     deviceId: deviceIdSchema,
     /** Base64 of the device's Ed25519 public key. */
     publicKey: z.string().min(1),
+    /**
+     * What to call this device in an interface.
+     *
+     * Carried because a person cannot tell two fingerprints apart, and every decision they are
+     * asked to make about a device — let it in, remove it — is a decision about which one.
+     */
+    name: z.string().min(1).max(80),
   })
   .strict();
 
@@ -48,6 +55,7 @@ const keyPackageSchema = z
     inviteId: z.string().min(1),
     deviceId: deviceIdSchema,
     publicKey: z.string().min(1),
+    name: z.string().min(1).max(80),
     frame: sealedFrameSchema,
   })
   .strict();

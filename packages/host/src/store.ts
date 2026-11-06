@@ -37,6 +37,8 @@ export interface HostStore {
 export interface PinnedKey {
   readonly deviceId: string;
   readonly publicKey: string;
+  /** The name the device introduced itself with. */
+  readonly name: string;
 }
 
 export class MemoryHostStore implements HostStore {
@@ -193,7 +195,8 @@ function pinnedKey(value: unknown): PinnedKey | undefined {
   if (typeof value !== "object" || value === null) return undefined;
   const record = value as Record<string, unknown>;
   if (typeof record.deviceId !== "string" || typeof record.publicKey !== "string") return undefined;
-  return { deviceId: record.deviceId, publicKey: record.publicKey };
+  const name = typeof record.name === "string" && record.name.length > 0 ? record.name : "a device";
+  return { deviceId: record.deviceId, publicKey: record.publicKey, name };
 }
 
 function safeJson(line: string): unknown {
