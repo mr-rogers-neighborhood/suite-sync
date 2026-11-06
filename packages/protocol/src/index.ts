@@ -67,6 +67,14 @@ export {
   spendInvite,
 } from "./invite.js";
 export {
+  formatInvite,
+  INVITE_SCHEME,
+  type InviteDetails,
+  type InviteParse,
+  JOIN_HOST,
+  parseInvite,
+} from "./inviteLink.js";
+export {
   encodeRelayMessage,
   isRelayCompatible,
   parseClientMessage,

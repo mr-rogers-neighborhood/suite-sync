@@ -27,6 +27,15 @@ export function createRelayClient(options, handlers) {
             });
             resolve({
                 send: (frame) => send({ type: "frame", frame }),
+                sendInvite: (record) => send({ type: "invite", record }),
+                sendKeyPackage: (message) => send({
+                    type: "keypackage",
+                    inviteId: message.inviteId,
+                    deviceId: message.deviceId,
+                    publicKey: message.publicKey,
+                    name: message.name,
+                    frame: message.frame,
+                }),
                 since: (after) => send({ type: "since", after }),
                 setRole: (record) => send({ type: "role", record }),
                 close: () => socket.close(),

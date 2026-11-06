@@ -1,4 +1,5 @@
 import { framePayload, type SealedFrame } from "./frame.js";
+import type { InviteRecord } from "./invite.js";
 import {
   encodeRelayMessage,
   parseHostMessage,
@@ -50,6 +51,16 @@ export interface RelayClientHandlers {
 export interface RelayClient {
   /** Seal nothing: hand over a frame this device already signed. */
   send(frame: SealedFrame): void;
+  /** Publish an invitation, so the host will honour it. */
+  sendInvite(record: InviteRecord): void;
+  /** Ask to join, with the one thing a device with no role is allowed to send. */
+  sendKeyPackage(message: {
+    inviteId: string;
+    deviceId: string;
+    publicKey: string;
+    name: string;
+    frame: SealedFrame;
+  }): void;
   /** Ask for everything after `after`. 0 means everything the host holds. */
   since(after: number): void;
   setRole(record: RoleRecord): void;
@@ -90,6 +101,16 @@ export function createRelayClient(
       });
       resolve({
         send: (frame: SealedFrame) => send({ type: "frame", frame }),
+        sendInvite: (record: InviteRecord) => send({ type: "invite", record }),
+        sendKeyPackage: (message) =>
+          send({
+            type: "keypackage",
+            inviteId: message.inviteId,
+            deviceId: message.deviceId,
+            publicKey: message.publicKey,
+            name: message.name,
+            frame: message.frame,
+          }),
         since: (after: number) => send({ type: "since", after }),
         setRole: (record: RoleRecord) => send({ type: "role", record }),
         close: () => socket.close(),

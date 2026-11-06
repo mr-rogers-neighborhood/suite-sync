@@ -4,6 +4,7 @@ export { frameHeaderSchema, frameKindSchema, framePayload, frameRejection, frame
 export { addDevice, createDeviceIdentity, createWorkspaceGroup, decodeGroup, decodeKeyPackageBytes, encodeGroup, encodeKeyPackageBytes, exportKey, joinWorkspaceGroup, leafIndexOf, open, removeDevice, SUITE_CIPHERSUITE, seal, } from "./group.js";
 export { deviceIdSchema, inviteIdSchema, isDeviceId, isInviteId, isMemberId, isWorkspaceId, memberIdSchema, workspaceIdSchema, } from "./ids.js";
 export { addInvite, createInviteState, invitedRole, inviteRecordPayload, inviteRecordSchema, inviteRejectionSchema, liveInvite, spendInvite, } from "./invite.js";
+export { formatInvite, INVITE_SCHEME, JOIN_HOST, parseInvite, } from "./inviteLink.js";
 export { encodeRelayMessage, isRelayCompatible, parseClientMessage, parseHostMessage, RELAY_PROTOCOL_VERSION, relayClientMessageSchema, relayErrorCodeSchema, relayHostMessageSchema, } from "./relay.js";
 export { createRelayClient, signFrame, } from "./relayClient.js";
 export { applyRoleRecord, applyRoleRecords, createRoleState, mayWrite, ownerDevices, roleOfDevice, roleRecordPayload, roleRecordSchema, roleRejectionSchema, } from "./roleRecord.js";
