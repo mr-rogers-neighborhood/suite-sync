@@ -1,6 +1,6 @@
 {
   "name": "@suite/sync",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "The Suite sync protocol: the MLS group a device belongs to, the frames a blind host stores, and the role records that decide who may write. Pure TypeScript, no document format.",
   "type": "module",
   "main": "./dist/index.js",
