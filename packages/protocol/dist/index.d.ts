@@ -1,5 +1,7 @@
 export { decodeBase64, encodeBase64 } from "./base64.js";
 export { canonicalJson } from "./canonical.js";
+export { type Frame, type FrameHeader, type FrameKind, type FrameRejection, frameHeaderSchema, frameKindSchema, framePayload, frameRejection, frameSchema, hostAcceptsEpoch, } from "./frame.js";
+export { type AddDeviceResult, addDevice, createDeviceIdentity, createWorkspaceGroup, type DeviceGroup, type DeviceIdentity, decodeGroup, encodeGroup, exportKey, joinWorkspaceGroup, type OpenedMessage, open, type SealedMessage, SUITE_CIPHERSUITE, seal, } from "./group.js";
 export { type DeviceId, deviceIdSchema, type InviteId, inviteIdSchema, isDeviceId, isInviteId, isMemberId, isWorkspaceId, type MemberId, memberIdSchema, type WorkspaceId, workspaceIdSchema, } from "./ids.js";
 export { activeMembers, applyMembershipEntries, applyMembershipEntry, createMembershipState, describeMembershipRejection, type InviteRecord, inviteRecordSchema, type MemberRecord, type MembershipAction, type MembershipEntry, type MembershipRejection, type MembershipResult, type MembershipState, type MembershipStateParse, type MembershipVerifier, memberRecordSchema, membershipActionSchema, membershipEntryPayload, membershipEntrySchema, membershipStateSchema, ownerIds, parseMembershipEntry, parseMembershipState, roleOf, } from "./membership.js";
 export { canInvite, canWrite, type MemberRole, memberRoleSchema, roleRank, } from "./roles.js";

@@ -1,6 +1,35 @@
 export { decodeBase64, encodeBase64 } from "./base64.js";
 export { canonicalJson } from "./canonical.js";
 export {
+  type Frame,
+  type FrameHeader,
+  type FrameKind,
+  type FrameRejection,
+  frameHeaderSchema,
+  frameKindSchema,
+  framePayload,
+  frameRejection,
+  frameSchema,
+  hostAcceptsEpoch,
+} from "./frame.js";
+export {
+  type AddDeviceResult,
+  addDevice,
+  createDeviceIdentity,
+  createWorkspaceGroup,
+  type DeviceGroup,
+  type DeviceIdentity,
+  decodeGroup,
+  encodeGroup,
+  exportKey,
+  joinWorkspaceGroup,
+  type OpenedMessage,
+  open,
+  type SealedMessage,
+  SUITE_CIPHERSUITE,
+  seal,
+} from "./group.js";
+export {
   type DeviceId,
   deviceIdSchema,
   type InviteId,

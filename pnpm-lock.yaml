@@ -206,9 +206,15 @@ importers:
 
   packages/protocol:
     dependencies:
+      '@noble/hashes':
+        specifier: ^2.4.0
+        version: 2.4.0
       loro-crdt:
         specifier: ^1.16.4
         version: 1.17.1
+      ts-mls:
+        specifier: 1.6.4
+        version: 1.6.4(@noble/ciphers@2.1.1)
       zod:
         specifier: ^4.6.7
         version: 4.6.7
@@ -291,6 +297,14 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  '@hpke/common@1.11.0':
+    resolution: {integrity: sha512-ZV551VgT4+pjTN1xlM1Zu9CrvLcff1sV1F2iFQJgg3gVNLy/hiOgLOjK3cz5LZYMKYkt54xe7ityu0rTYVSDGw==}
+    engines: {node: '>=16.0.0'}
+
+  '@hpke/core@1.9.0':
+    resolution: {integrity: sha512-pFxWl1nNJeQCSUFs7+GAblHvXBCjn9EPN65vdKlYQil2aURaRxfGMO6vBKGqm1YHTKwiAxJQNEI70PbSowMP9Q==}
+    engines: {node: '>=16.0.0'}
+
   '@jridgewell/resolve-uri@3.1.2':
     resolution: {integrity: sha512-bRISgCIjP20/tbWSPWMEi54QVPRZExkuD9lJL+UIxUKtwVJA8wW1Trb1jMs1RFXo1CBTNZ/5hpC9QvmKWdopKw==}
     engines: {node: '>=6.0.0'}
@@ -300,6 +314,14 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@noble/ciphers@2.1.1':
+    resolution: {integrity: sha512-bysYuiVfhxNJuldNXlFEitTVdNnYUc+XNJZd7Qm2a5j1vZHgY+fazadNFWFaMK/2vye0JVlxV3gHmC0WDfAOQw==}
+    engines: {node: '>= 20.19.0'}
+
+  '@noble/hashes@2.4.0':
+    resolution: {integrity: sha512-X5XaVWZIBCT7HHZGm5I7ZQXDwLG+bGXuSrMQAW+7Zvl87h1kmc1ZB1VSRJcpUfoUrGQp4Fkoxm5kZ+Ms+aW+eA==}
+    engines: {node: '>= 20.19.0'}
 
   '@oxc-project/types@0.156.0':
     resolution: {integrity: sha512-1Duyg48TdJNdyhEB8Xn1L36bT9Pv6GUtlKjHxOys8xkaF/rQq3XJE+bAurSK/AgIz5mGFsb77cn9Pb20+WCScw==}
@@ -592,6 +614,30 @@ packages:
     resolution: {integrity: sha512-wXR/dYpcqKmfWpEdZjiKJOwCNFndD0DMnrW/cYjVGttEkBfVgcLFHoNrlj47mjOVic9yyNu65alsgF4NQyTa2g==}
     engines: {node: '>=12.0.0'}
 
+  ts-mls@1.6.4:
+    resolution: {integrity: sha512-BFb9qJ3V1+HIuifC+MtnlROEj3oc6NEzA7Ig1/LAmANDRhNay7UCnwkzijzHH9cav5wf1BoJw8KQ2mXiEhPy1Q==}
+    peerDependencies:
+      '@hpke/chacha20poly1305': 1.8.0
+      '@hpke/dhkem-x448': 1.8.0
+      '@hpke/hybridkem-x-wing': 0.7.0
+      '@hpke/ml-kem': 0.3.0
+      '@noble/ciphers': 2.1.1
+      '@noble/curves': 2.0.1
+      '@noble/post-quantum': 0.5.2
+    peerDependenciesMeta:
+      '@hpke/chacha20poly1305':
+        optional: true
+      '@hpke/dhkem-x448':
+        optional: true
+      '@hpke/hybridkem-x-wing':
+        optional: true
+      '@hpke/ml-kem':
+        optional: true
+      '@noble/curves':
+        optional: true
+      '@noble/post-quantum':
+        optional: true
+
   typescript@5.9.3:
     resolution: {integrity: sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw==}
     engines: {node: '>=14.17'}
@@ -749,6 +795,12 @@ snapshots:
   '@biomejs/cli-win32-x64@2.6.5':
     optional: true
 
+  '@hpke/common@1.11.0': {}
+
+  '@hpke/core@1.9.0':
+    dependencies:
+      '@hpke/common': 1.11.0
+
   '@jridgewell/resolve-uri@3.1.2': {}
 
   '@jridgewell/sourcemap-codec@1.6.0': {}
@@ -757,6 +809,10 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@noble/ciphers@2.1.1': {}
+
+  '@noble/hashes@2.4.0': {}
 
   '@oxc-project/types@0.156.0': {}
 
@@ -958,6 +1014,11 @@ snapshots:
     dependencies:
       fdir: 6.5.0(picomatch@4.0.7)
       picomatch: 4.0.7
+
+  ts-mls@1.6.4(@noble/ciphers@2.1.1):
+    dependencies:
+      '@hpke/core': 1.9.0
+      '@noble/ciphers': 2.1.1
 
   typescript@5.9.3: {}
 

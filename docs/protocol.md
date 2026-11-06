@@ -48,7 +48,7 @@ read what it stores.
 MLS says who is in the group, not who may write. A **role record** per device travels beside the group:
 
 ```ts
-type RoleRecord = { workspaceId, deviceId, role: "owner" | "editor" | "viewer", seq, signature };
+type RoleRecord = { workspaceId; deviceId; role: "owner" | "editor" | "viewer"; seq; signature };
 ```
 
 It is signed by an owner's device key and ordered by `seq`, so the host can check `role !== "viewer"`
@@ -101,13 +101,13 @@ The host stores one opaque record per message. It can read the header and nothin
 
 ```ts
 type Frame = {
-  kind: "commit" | "welcome" | "application";   // application = a document update
+  kind: "commit" | "welcome" | "application"; // application = a document update
   workspaceId: string;
-  deviceId: string;        // who sent it, and whose signature it carries
-  epoch: number;           // the MLS epoch the sender was in
-  payload: string;         // base64 of the encoded MLS message
-  signature: string;       // device key over the header and payload
-  receivedAt: string;      // stamped by the host
+  deviceId: string; // who sent it, and whose signature it carries
+  epoch: number; // the MLS epoch the sender was in
+  payload: string; // base64 of the encoded MLS message
+  signature: string; // device key over the header and payload
+  receivedAt: string; // stamped by the host
 };
 ```
 

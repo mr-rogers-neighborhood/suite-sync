@@ -20,16 +20,16 @@ right shape; it is whether an implementation runs here, and what its sharp edges
 `ts-mls@1.6.4` against Node 26, no native build step, two devices, one group. The script is throwaway;
 these numbers are what the decision rests on.
 
-| Measured | Result |
-| --- | --- |
-| Forms a group, adds a device, both report epoch 1 | yes |
-| An application message round-trips | yes, plaintext recovered |
-| Group state survives `encodeGroupState` / `decodeGroupState` | 1.6 kB, decodes with nothing trailing |
-| `mlsExporter` produces a workspace key | 32 bytes |
-| Commit on the wire | 0.5 kB |
-| Welcome on the wire | 0.8 kB |
-| Application message on the wire | 0.3 kB |
-| A competing commit from the same epoch, arriving late | **not an error** — silently absorbed, epoch unchanged |
+| Measured                                                     | Result                                                |
+| ------------------------------------------------------------ | ----------------------------------------------------- |
+| Forms a group, adds a device, both report epoch 1            | yes                                                   |
+| An application message round-trips                           | yes, plaintext recovered                              |
+| Group state survives `encodeGroupState` / `decodeGroupState` | 1.6 kB, decodes with nothing trailing                 |
+| `mlsExporter` produces a workspace key                       | 32 bytes                                              |
+| Commit on the wire                                           | 0.5 kB                                                |
+| Welcome on the wire                                          | 0.8 kB                                                |
+| Application message on the wire                              | 0.3 kB                                                |
+| A competing commit from the same epoch, arriving late        | **not an error** — silently absorbed, epoch unchanged |
 
 Two things the spike found that a document would not have:
 
