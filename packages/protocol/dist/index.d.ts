@@ -1,7 +1,7 @@
 export { decodeBase64, encodeBase64 } from "./base64.js";
 export { canonicalJson } from "./canonical.js";
 export { type Frame, type FrameHeader, type FrameKind, type FrameRejection, frameHeaderSchema, frameKindSchema, framePayload, frameRejection, frameRejectionSchema, frameSchema, hostAcceptsEpoch, type SealedFrame, sealedFrameSchema, } from "./frame.js";
-export { type AddDeviceResult, addDevice, createDeviceIdentity, createWorkspaceGroup, type DeviceGroup, type DeviceIdentity, decodeGroup, encodeGroup, exportKey, joinWorkspaceGroup, type OpenedMessage, open, type SealedMessage, SUITE_CIPHERSUITE, seal, } from "./group.js";
+export { type AddDeviceResult, addDevice, createDeviceIdentity, createWorkspaceGroup, type DeviceGroup, type DeviceIdentity, decodeGroup, encodeGroup, exportKey, joinWorkspaceGroup, leafIndexOf, type OpenedMessage, open, type RemoveDeviceResult, removeDevice, type SealedMessage, SUITE_CIPHERSUITE, seal, } from "./group.js";
 export { type DeviceId, deviceIdSchema, type InviteId, inviteIdSchema, isDeviceId, isInviteId, isMemberId, isWorkspaceId, type MemberId, memberIdSchema, type WorkspaceId, workspaceIdSchema, } from "./ids.js";
 export { encodeRelayMessage, isRelayCompatible, parseClientMessage, parseHostMessage, RELAY_PROTOCOL_VERSION, type RelayClientMessage, type RelayErrorCode, type RelayFrame, type RelayHostMessage, type RelayJoined, relayClientMessageSchema, relayErrorCodeSchema, relayHostMessageSchema, } from "./relay.js";
 export { applyRoleRecord, applyRoleRecords, createRoleState, mayWrite, ownerDevices, type RoleRecord, type RoleRejection, type RoleResult, type RoleState, type RoleVerifier, roleOfDevice, roleRecordPayload, roleRecordSchema, roleRejectionSchema, } from "./roleRecord.js";

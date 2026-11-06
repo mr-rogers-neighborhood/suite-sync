@@ -8,7 +8,9 @@ import {
   encodeGroup,
   exportKey,
   joinWorkspaceGroup,
+  leafIndexOf,
   open,
+  removeDevice,
   seal,
 } from "./group.js";
 
@@ -79,6 +81,32 @@ describe("a device that was not there cannot read what came before", () => {
     const joined = await joinWorkspaceGroup(added.welcome, joiner);
 
     await expect(open(joined, sealed.message)).rejects.toThrow();
+  });
+});
+
+describe("revocation moves the epoch and shuts the door", () => {
+  it("denies a removed device everything sealed afterwards", async () => {
+    const owner = await createDeviceIdentity("owner-laptop");
+    const joiner = await createDeviceIdentity("owner-desktop");
+    const started = await createWorkspaceGroup(workspaceId, owner);
+    const added = await addDevice(started, joiner.keyPackage);
+    const joined = await joinWorkspaceGroup(added.welcome, joiner);
+
+    const epochBefore = added.group.epoch;
+    const leaf = leafIndexOf(added.group, "owner-desktop");
+    expect(leaf).not.toBeNull();
+
+    const removal = await removeDevice(added.group, leaf ?? -1);
+    expect(removal.group.epoch).toBeGreaterThan(epochBefore);
+
+    const afterRemoval = await seal(removal.group, encoder.encode("after the revocation"));
+    await expect(open(joined, afterRemoval.message)).rejects.toThrow();
+  });
+
+  it("finds no leaf for a device that was never in the group", async () => {
+    const owner = await createDeviceIdentity("owner-laptop");
+    const started = await createWorkspaceGroup(workspaceId, owner);
+    expect(leafIndexOf(started, "a-stranger")).toBeNull();
   });
 });
 

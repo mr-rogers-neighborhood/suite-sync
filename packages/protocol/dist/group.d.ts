@@ -42,6 +42,30 @@ export interface AddDeviceResult {
 export declare function addDevice(group: DeviceGroup, keyPackage: KeyPackage): Promise<AddDeviceResult>;
 /** Join from a welcome. Returns the device's group at the epoch the welcome names. */
 export declare function joinWorkspaceGroup(welcomeBytes: Uint8Array, identity: DeviceIdentity): Promise<DeviceGroup>;
+export interface RemoveDeviceResult {
+    readonly group: DeviceGroup;
+    /** The commit every remaining member must apply. */
+    readonly commit: Uint8Array;
+}
+/**
+ * The leaf index of a device, by the name it joined under.
+ *
+ * This is the leaf's *ordinal*, not its position in the tree array: leaves live at even
+ * node indices, and `remove` is addressed by the ordinal. Getting that wrong asks the
+ * library to remove a node that does not exist, which it refuses.
+ *
+ * A device that is not in the tree has no index, which is what makes this safe to call
+ * before a removal and useless afterwards.
+ */
+export declare function leafIndexOf(group: DeviceGroup, name: string): number | null;
+/**
+ * Remove a device. This is the revocation, and it is the only one.
+ *
+ * The commit advances the epoch, which is what denies the removed device everything that
+ * follows: it does not hold the new epoch's secrets, so a message sealed after this
+ * commit is not something it can read, whatever the host does.
+ */
+export declare function removeDevice(group: DeviceGroup, leafIndex: number): Promise<RemoveDeviceResult>;
 export interface SealedMessage {
     readonly group: DeviceGroup;
     readonly message: Uint8Array;

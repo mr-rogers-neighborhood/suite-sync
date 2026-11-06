@@ -70,6 +70,43 @@ export async function joinWorkspaceGroup(welcomeBytes, identity) {
     const state = await joinGroup(decoded[0].welcome, identity.keyPackage, identity.privateKeys, makePskIndex(undefined, {}), cs);
     return groupOf(state);
 }
+/**
+ * The leaf index of a device, by the name it joined under.
+ *
+ * This is the leaf's *ordinal*, not its position in the tree array: leaves live at even
+ * node indices, and `remove` is addressed by the ordinal. Getting that wrong asks the
+ * library to remove a node that does not exist, which it refuses.
+ *
+ * A device that is not in the tree has no index, which is what makes this safe to call
+ * before a removal and useless afterwards.
+ */
+export function leafIndexOf(group, name) {
+    const wanted = new TextEncoder().encode(name);
+    const tree = group.state.ratchetTree;
+    for (let index = 0; index < tree.length; index += 2) {
+        const node = tree[index];
+        if (node === undefined || node.nodeType !== "leaf")
+            continue;
+        const identity = node.leaf.credential.credentialType === "basic" ? node.leaf.credential.identity : null;
+        if (identity === null || identity.length !== wanted.length)
+            continue;
+        if (identity.every((byte, offset) => byte === wanted[offset]))
+            return index / 2;
+    }
+    return null;
+}
+/**
+ * Remove a device. This is the revocation, and it is the only one.
+ *
+ * The commit advances the epoch, which is what denies the removed device everything that
+ * follows: it does not hold the new epoch's secrets, so a message sealed after this
+ * commit is not something it can read, whatever the host does.
+ */
+export async function removeDevice(group, leafIndex) {
+    const cs = await cipherSuite();
+    const result = await createCommit({ state: group.state, cipherSuite: cs }, { extraProposals: [{ proposalType: "remove", remove: { removed: leafIndex } }] });
+    return { group: groupOf(result.newState), commit: encodeMlsMessage(result.commit) };
+}
 /** Encrypt one application message: a document update, or a metadata envelope. */
 export async function seal(group, plaintext) {
     const cs = await cipherSuite();
