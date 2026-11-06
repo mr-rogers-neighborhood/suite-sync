@@ -9,7 +9,7 @@
   },
   "scripts": {
     "build": "pnpm -r --workspace-concurrency=1 run build",
-    "check": "biome check . && pnpm build && pnpm typecheck && vitest run",
+    "check": "biome check . && pnpm build && pnpm typecheck && vitest run && git diff --exit-code -- packages",
     "format": "biome format --write .",
     "lint": "biome check .",
     "test": "vitest run",

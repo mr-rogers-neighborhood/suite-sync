@@ -1,5 +1,10 @@
 node_modules/
-dist/
+apps/*/dist/
 coverage/
 *.log
 .DS_Store
+
+# A consumer installs the packages from a git URL, where pnpm refuses to run a
+# git subdependency's build scripts without an allowlist keyed by the resolved
+# commit. So the package `dist` ships; `pnpm check` rebuilds and fails on drift.
+!packages/*/dist/
