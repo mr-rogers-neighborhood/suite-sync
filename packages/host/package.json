@@ -1,0 +1,32 @@
+{
+  "name": "@suite/host",
+  "version": "0.6.0",
+  "description": "The Suite sync host: a blind relay that stores encrypted frames, pins a device key, and keeps the role records that decide who may write. Embeds in Start, or runs as a CLI.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "@suite/sync": "workspace:*",
+    "ws": "^8.22.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "@types/ws": "^8.18.2",
+    "typescript": "~5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

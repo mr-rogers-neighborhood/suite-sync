@@ -2,21 +2,18 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
 
 /**
- * One project per package. `@suite/sync` covers both the pure root and the
- * `./loro` subpath; the server is a CLI and a transport. The aliases point the
- * tests at source, so a test run does not depend on a prior build; the published
- * package has only `dist`, which is what a git consumer installs.
+ * One project per package. The aliases point the tests at source, so a test run does
+ * not depend on a prior build; a git consumer installs `dist`, which is what the
+ * committed output check protects.
  */
 const protocolRoot = fileURLToPath(new URL("./packages/protocol/src/index.ts", import.meta.url));
-const protocolLoro = fileURLToPath(
-  new URL("./packages/protocol/src/loro/index.ts", import.meta.url),
-);
+const hostRoot = fileURLToPath(new URL("./packages/host/src/index.ts", import.meta.url));
 
 export default defineConfig({
   resolve: {
     alias: [
-      { find: "@suite/sync/loro", replacement: protocolLoro },
       { find: /^@suite\/sync$/u, replacement: protocolRoot },
+      { find: /^@suite\/host$/u, replacement: hostRoot },
     ],
   },
   test: {
@@ -27,6 +24,13 @@ export default defineConfig({
           name: "protocol",
           environment: "node",
           include: ["packages/protocol/src/**/*.test.ts"],
+        },
+      },
+      {
+        test: {
+          name: "host",
+          environment: "node",
+          include: ["packages/host/src/**/*.test.ts"],
         },
       },
       {

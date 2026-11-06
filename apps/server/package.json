@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@suite/sync": "workspace:*",
-    "ws": "^8.22.1"
+    "@suite/host": "workspace:*",
+    "@suite/sync": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.0",

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 import { pathToFileURL } from "node:url";
+import { createSyncServer, FileHostStore, HostRegistry } from "@suite/host";
 import { RELAY_PROTOCOL_VERSION } from "@suite/sync";
-import { createSyncServer, HostRegistry } from "./server.js";
-import { FileHostStore } from "./store.js";
 
 export const SERVER_NAME = "suite-sync";
 export const SERVER_VERSION = "0.1.0";
