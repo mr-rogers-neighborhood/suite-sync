@@ -196,12 +196,8 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       deviceId: message.deviceId,
     });
 
-    send(socket, {
-      type: "ack",
-      epoch: joined.epoch,
-      versionVector: joined.versionVector,
-    });
-
+    // Catch-up first, then the ack: the client's "synced" signal fires on the
+    // ack, so it must not run before the history it is waiting for is applied.
     if (joined.update.length > 0) {
       send(socket, {
         type: "update",
@@ -212,6 +208,12 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
         payload: encodeBase64(joined.update),
       });
     }
+
+    send(socket, {
+      type: "ack",
+      epoch: joined.epoch,
+      versionVector: joined.versionVector,
+    });
   }
 
   function handleUpdate(

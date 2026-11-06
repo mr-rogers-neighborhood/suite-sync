@@ -289,10 +289,10 @@ describe("sync server", () => {
     const viewer = await client(running.url);
     await hello(viewer, viewerId, room.epoch);
 
-    expect((await viewer.next()).type).toBe("ack");
     const catchUp = await viewer.next();
     expect(catchUp.type).toBe("update");
     if (catchUp.type !== "update") return;
+    expect((await viewer.next()).type).toBe("ack");
 
     const viewerPeer = new LoroSyncPeer();
     viewerPeer.applyUpdate(decodeBase64(catchUp.payload) ?? new Uint8Array());
@@ -348,11 +348,11 @@ describe("sync server", () => {
 
       const viewer = await client(second.url);
       await hello(viewer, viewerId, secondRoom.epoch);
-      expect((await viewer.next()).type).toBe("ack");
 
       const catchUp = await viewer.next();
       expect(catchUp.type).toBe("update");
       if (catchUp.type !== "update") return;
+      expect((await viewer.next()).type).toBe("ack");
 
       const viewerPeer = new LoroSyncPeer();
       viewerPeer.applyUpdate(decodeBase64(catchUp.payload) ?? new Uint8Array());
