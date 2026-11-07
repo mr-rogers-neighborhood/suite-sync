@@ -91,9 +91,34 @@ from})` sends the diff, not the whole history.
 
 ### Presence
 
-Presence is not in the durable message set. It uses a separate ephemeral channel with a time to live;
-a dropped connection must not leave a ghost cursor. A position is persisted only when the reader
-releases the drag, which is a normal document write.
+Presence is not in the durable message set. It travels as an `ephemeral` message that the host
+**verifies, forwards and forgets**: never numbered, never appended to the log, never written down. A
+cursor in the log would be a document that grows every time somebody moves.
+
+It is deliberately not a frame. A frame carries the group's application ciphertext, which ratchets per
+message, so one dropped cursor would leave a gap in the secret tree that the next *document* update
+would have to work around. Presence is sealed with a key derived from the group instead
+(`exportKey(group, "suite/presence", workspaceId)`), so it can be late, out of order or absent and cost
+nothing. A device in another epoch simply cannot open it, which is the right answer for something that
+only describes the present.
+
+The check that admits it is **membership, not permission to write**: a reader whose cursor nobody could
+see would make collaboration mean collaboration between editors. A socket may only speak for the device
+it joined as, whatever a signature says.
+
+A position is persisted only when the reader releases the drag, which is a normal document write.
+
+### Removal
+
+The commitment that takes a device out of the group is ciphertext, so the host is told separately: a
+`removal` record, signed by an owner, beside the role records. The host drops that device's socket,
+corrects the roster, and refuses it afterwards. The device is told `removed` before its socket closes,
+because a bare close reads as a bad connection and the app would offer a retry that can never work.
+
+Spending a fresh invitation is what lets a removed device back in: an owner minting one is the
+permission, so "remove" is not a door that only opens one way. A removed device may say which
+invitation it holds when it joins (`inviteId` on `join`), which is how it explains itself at the door
+rather than being told it is removed with no way to answer.
 
 ## The frame
 
