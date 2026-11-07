@@ -1,22 +1,30 @@
 import { createServer } from "node:http";
 import {
   addInvite,
+  applyRemovalRecord,
   applyRoleRecord,
   createInviteState,
+  createRemovalState,
   createRoleState,
   encodeRelayMessage,
+  ephemeralPayload,
+  hasRole,
   type InviteRecord,
   type InviteState,
   isRelayCompatible,
+  isRemoved,
   liveInvite,
   type MemberRole,
   parseClientMessage,
   RELAY_PROTOCOL_VERSION,
   type RelayClientMessage,
   type RelayMember,
+  type RemovalRecord,
+  type RemovalState,
   type RoleRecord,
   type RoleState,
   type RoleVerifier,
+  reinstateDevice,
   spendInvite,
 } from "@suite/sync";
 import { type RawData, WebSocket, WebSocketServer } from "ws";
@@ -35,6 +43,8 @@ export interface HostedRoom {
   roles: RoleState;
   /** Invitations an owner wrote. A live one lets exactly one key package through. */
   invites: InviteState;
+  /** Devices an owner has taken out, and when. */
+  removals: RemovalState;
   /**
    * Each device's key and the name it introduced itself with.
    *
@@ -151,6 +161,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
         log: new FrameLog(workspaceId),
         roles: createRoleState(workspaceId),
         invites: createInviteState(workspaceId),
+        removals: createRemovalState(workspaceId),
         keys: new Map(),
         sockets: new Set(),
       };
@@ -168,6 +179,15 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       for (const record of await store.loadRoles(workspaceId)) {
         const applied = applyRoleRecord(room.roles, record, roleVerifierFor(room));
         if (applied.ok) room.roles = applied.state;
+      }
+      for (const record of await store.loadRemovals(workspaceId)) {
+        const applied = applyRemovalRecord(
+          room.removals,
+          record,
+          roleVerifierFor(room),
+          (deviceId) => room.roles.roles[deviceId] === "owner",
+        );
+        if (applied.ok) room.removals = applied.state;
       }
 
       registry.add(room);
@@ -226,6 +246,12 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
       case "role":
         await handleRole(socket, context, message.record);
         return;
+      case "ephemeral":
+        handleEphemeral(socket, context, message);
+        return;
+      case "removal":
+        await handleRemoval(socket, context, message.record);
+        return;
       case "frame":
         await handleFrame(socket, context, message.frame);
         return;
@@ -261,6 +287,19 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
         publicKey: message.publicKey,
         name: message.name,
       });
+    }
+
+    if (isRemoved(room.removals, message.deviceId)) {
+      // It reconnected. Say which happened rather than letting it sit on "the host is not
+      // answering", which would offer a retry that can never work — unless it is holding an
+      // invitation, in which case somebody has asked it back and the door is the invitation.
+      const held = message.inviteId;
+      const live = held === undefined ? null : liveInvite(room.invites, held, now());
+      if (live === null || !live.ok) {
+        send(socket, { type: "removed" });
+        socket.close();
+        return;
+      }
     }
 
     contexts.set(socket, { room, deviceId: message.deviceId });
@@ -300,6 +339,7 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
    */
   function rosterOf(room: HostedRoom): RelayMember[] {
     return Object.entries(room.roles.roles)
+      .filter(([deviceId]) => !isRemoved(room.removals, deviceId))
       .map(([deviceId, role]) => ({
         deviceId,
         role,
@@ -393,6 +433,9 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
 
     context.room.invites = spendInvite(context.room.invites, message.inviteId);
     await store.appendInvite(context.room.workspaceId, live.record);
+    // An owner minting a fresh invitation is the permission to come back, so spending one is
+    // what clears a removal. Otherwise "remove" would be a door that only opens one way.
+    context.room.removals = reinstateDevice(context.room.removals, message.deviceId);
 
     const index = context.room.log.length;
     context.room.log.append(verdict.frame);
@@ -455,6 +498,11 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     context: SocketContext,
     sealed: Parameters<typeof admitFrame>[0],
   ): Promise<void> {
+    if (isRemoved(context.room.removals, sealed.deviceId)) {
+      send(socket, { type: "refused", reason: "removed" });
+      return;
+    }
+
     const verdict = admitFrame(
       sealed,
       { workspaceId: context.room.workspaceId, newestEpoch: context.room.log.newestEpoch },
@@ -479,6 +527,98 @@ export async function createSyncServer(options: SyncServerOptions): Promise<Sync
     for (const peer of context.room.sockets) {
       if (peer !== socket) send(peer, relayed);
     }
+  }
+
+  /**
+   * A device's presence, forwarded and forgotten.
+   *
+   * Deliberately not `admitFrame`: that path numbers a frame, appends it to the log and writes
+   * it down, and all three are wrong here. A cursor in the log would be a document that grows
+   * every time somebody moves, and a stale epoch is normal for presence rather than a fault —
+   * two devices only need to be in the same epoch to read each other, which the sender's
+   * sealing already guarantees.
+   *
+   * Membership is the check, not permission to write: a reader whose cursor nobody could see
+   * would make collaboration mean collaboration between editors.
+   */
+  function handleEphemeral(
+    socket: WebSocket,
+    context: SocketContext,
+    message: Extract<RelayClientMessage, { type: "ephemeral" }>,
+  ): void {
+    if (isRemoved(context.room.removals, message.deviceId)) {
+      send(socket, { type: "refused", reason: "removed" });
+      return;
+    }
+    if (!hasRole(context.room.roles.roles[message.deviceId])) {
+      send(socket, { type: "refused", reason: "not-authorized" });
+      return;
+    }
+    if (message.deviceId !== context.deviceId || message.workspaceId !== context.room.workspaceId) {
+      // A socket may only speak for the device it joined as, in the room it joined.
+      send(socket, { type: "refused", reason: "invalid-signature" });
+      return;
+    }
+    const key = context.room.keys.get(message.deviceId)?.publicKey;
+    if (
+      key === undefined ||
+      !options.verifyFrame(ephemeralPayload(message), message.signature, key)
+    ) {
+      send(socket, { type: "refused", reason: "invalid-signature" });
+      return;
+    }
+
+    const forwarded = {
+      type: "ephemeral" as const,
+      workspaceId: message.workspaceId,
+      deviceId: message.deviceId,
+      payload: message.payload,
+      signature: message.signature,
+    };
+    for (const peer of context.room.sockets) {
+      if (peer !== socket) send(peer, forwarded);
+    }
+  }
+
+  /**
+   * Take a device out.
+   *
+   * The commitment that removes it from the group is ciphertext, so this is the host's half:
+   * the record it can read, the socket it can close, and the roster it can correct. The
+   * removed device is told before the socket goes, because a bare close reads as a bad
+   * connection and the app would offer to retry something that can never work.
+   */
+  async function handleRemoval(
+    socket: WebSocket,
+    context: SocketContext,
+    record: RemovalRecord,
+  ): Promise<void> {
+    const applied = applyRemovalRecord(
+      context.room.removals,
+      record,
+      roleVerifierFor(context.room),
+      (deviceId) => context.room.roles.roles[deviceId] === "owner",
+    );
+    if (!applied.ok) {
+      send(socket, { type: "refused", reason: applied.reason });
+      return;
+    }
+    context.room.removals = applied.state;
+    await store.appendRemoval(context.room.workspaceId, record);
+
+    for (const peer of context.room.sockets) {
+      const peerId = contexts.get(peer)?.deviceId;
+      if (peerId === record.deviceId) {
+        send(peer, { type: "removed" });
+        peer.close();
+      }
+    }
+    for (const peer of [...context.room.sockets]) {
+      if (contexts.get(peer)?.deviceId === record.deviceId) context.room.sockets.delete(peer);
+    }
+
+    const roster = { type: "roster" as const, members: rosterOf(context.room) };
+    for (const peer of context.room.sockets) send(peer, roster);
   }
 
   /** Close a retention window on a running host, not only on the next boot. */

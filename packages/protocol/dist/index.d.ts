@@ -5,9 +5,10 @@ export { type AddDeviceResult, addDevice, createDeviceIdentity, createWorkspaceG
 export { type DeviceId, deviceIdSchema, type InviteId, inviteIdSchema, isDeviceId, isInviteId, isMemberId, isWorkspaceId, type MemberId, memberIdSchema, type WorkspaceId, workspaceIdSchema, } from "./ids.js";
 export { addInvite, createInviteState, type InviteRecord, type InviteRejection, type InviteResult, type InviteState, type InviteVerifier, invitedRole, inviteRecordPayload, inviteRecordSchema, inviteRejectionSchema, liveInvite, spendInvite, } from "./invite.js";
 export { formatInvite, INVITE_SCHEME, type InviteDetails, type InviteParse, JOIN_HOST, parseInvite, } from "./inviteLink.js";
-export { encodeRelayMessage, isRelayCompatible, parseClientMessage, parseHostMessage, RELAY_PROTOCOL_VERSION, type RelayApplied, type RelayClientMessage, type RelayErrorCode, type RelayFrame, type RelayHostMessage, type RelayJoined, type RelayMember, type RelayRoster, type RelayWaiting, relayClientMessageSchema, relayErrorCodeSchema, relayHostMessageSchema, } from "./relay.js";
+export { type EphemeralBody, type EphemeralMessage, encodeRelayMessage, ephemeralPayload, isRelayCompatible, parseClientMessage, parseHostMessage, RELAY_PROTOCOL_VERSION, type RelayApplied, type RelayClientMessage, type RelayEphemeral, type RelayErrorCode, type RelayFrame, type RelayHostMessage, type RelayJoined, type RelayMember, type RelayRoster, type RelayWaiting, relayClientMessageSchema, relayErrorCodeSchema, relayHostMessageSchema, } from "./relay.js";
 export { createRelayClient, type RelayClient, type RelayClientHandlers, type RelayClientOptions, type RelayWebSocket, type RelayWebSocketFactory, signFrame, } from "./relayClient.js";
+export { applyRemovalRecord, createRemovalState, isRemoved, type RemovalRecord, type RemovalRejection, type RemovalResult, type RemovalState, type RemovalVerifier, reinstateDevice, removalRecordPayload, removalRecordSchema, removalRejectionSchema, } from "./removal.js";
 export { applyRoleRecord, applyRoleRecords, createRoleState, mayWrite, ownerDevices, type RoleRecord, type RoleRejection, type RoleResult, type RoleState, type RoleVerifier, roleOfDevice, roleRecordPayload, roleRecordSchema, roleRejectionSchema, } from "./roleRecord.js";
-export { canInvite, canWrite, type MemberRole, memberRoleSchema, roleRank, } from "./roles.js";
+export { canInvite, canWrite, hasRole, type MemberRole, memberRoleSchema, roleRank, } from "./roles.js";
 export { isProtocolCompatible, SYNC_PROTOCOL_VERSION } from "./version.js";
 //# sourceMappingURL=index.d.ts.map

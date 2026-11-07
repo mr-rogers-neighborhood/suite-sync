@@ -1,4 +1,4 @@
-import { type InviteState, type MemberRole, type RoleState, type RoleVerifier } from "@suite/sync";
+import { type InviteState, type MemberRole, type RemovalState, type RoleState, type RoleVerifier } from "@suite/sync";
 import { WebSocket } from "ws";
 import { FrameLog, type FrameVerifier } from "./blindRoom.js";
 import { type HostStore, type PinnedKey } from "./store.js";
@@ -14,6 +14,8 @@ export interface HostedRoom {
     roles: RoleState;
     /** Invitations an owner wrote. A live one lets exactly one key package through. */
     invites: InviteState;
+    /** Devices an owner has taken out, and when. */
+    removals: RemovalState;
     /**
      * Each device's key and the name it introduced itself with.
      *

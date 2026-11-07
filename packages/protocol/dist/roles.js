@@ -10,6 +10,16 @@ export const memberRoleSchema = z.enum(["owner", "editor", "viewer"]);
 export function canWrite(role) {
     return role !== "viewer";
 }
+/**
+ * Whether a device is in this workspace at all, whatever it may do.
+ *
+ * The distinction matters for exactly one message: presence. A reader that nobody can see
+ * would make "collaboration" mean "collaboration between editors", so a viewer's cursor is
+ * forwarded while its frames are still refused.
+ */
+export function hasRole(role) {
+    return role !== null && role !== undefined;
+}
 export function canInvite(role) {
     return role === "owner";
 }

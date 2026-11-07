@@ -7,7 +7,9 @@ import {
   inviteRecordSchema,
   type MemberRole,
   memberRoleSchema,
+  type RemovalRecord,
   type RoleRecord,
+  removalRecordSchema,
   roleRecordSchema,
 } from "@suite/sync";
 
@@ -32,6 +34,14 @@ export interface HostStore {
   /** The public key a device joined with, so its signature can be checked after a restart. */
   loadKeys(workspaceId: string): Promise<readonly PinnedKey[]>;
   appendKey(workspaceId: string, key: PinnedKey): Promise<void>;
+  /**
+   * Devices an owner has taken out.
+   *
+   * Kept for the same reason role records are: a host that forgot would keep forwarding a
+   * removed device's mail, and would accept it back after a restart as if nothing happened.
+   */
+  loadRemovals(workspaceId: string): Promise<readonly RemovalRecord[]>;
+  appendRemoval(workspaceId: string, record: RemovalRecord): Promise<void>;
   /** Forget frames that arrived before `cutoff`. A rewrite, so it runs when a window closes. */
   compact(workspaceId: string, cutoff: string): Promise<void>;
 }
@@ -57,6 +67,7 @@ export class MemoryHostStore implements HostStore {
   private readonly invites = new Map<string, InviteRecord[]>();
   private readonly roles = new Map<string, RoleRecord[]>();
   private readonly keys = new Map<string, PinnedKey[]>();
+  private readonly removals = new Map<string, RemovalRecord[]>();
 
   async loadFrames(workspaceId: string): Promise<readonly Frame[]> {
     return [...(this.frames.get(workspaceId) ?? [])];
@@ -96,6 +107,16 @@ export class MemoryHostStore implements HostStore {
     const existing = this.keys.get(workspaceId) ?? [];
     existing.push(key);
     this.keys.set(workspaceId, existing);
+  }
+
+  async loadRemovals(workspaceId: string): Promise<readonly RemovalRecord[]> {
+    return [...(this.removals.get(workspaceId) ?? [])];
+  }
+
+  async appendRemoval(workspaceId: string, record: RemovalRecord): Promise<void> {
+    const existing = this.removals.get(workspaceId) ?? [];
+    existing.push(record);
+    this.removals.set(workspaceId, existing);
   }
 
   async compact(workspaceId: string, cutoff: string): Promise<void> {
@@ -153,6 +174,17 @@ export class FileHostStore implements HostStore {
     await this.appendLine(this.keyPath(workspaceId), key);
   }
 
+  async loadRemovals(workspaceId: string): Promise<readonly RemovalRecord[]> {
+    return readLines(this.removalPath(workspaceId), (value) => {
+      const parsed = removalRecordSchema.safeParse(value);
+      return parsed.success ? parsed.data : undefined;
+    });
+  }
+
+  async appendRemoval(workspaceId: string, record: RemovalRecord): Promise<void> {
+    await this.appendLine(this.removalPath(workspaceId), record);
+  }
+
   async compact(workspaceId: string, cutoff: string): Promise<void> {
     const kept = (await this.loadFrames(workspaceId)).filter((f) => f.receivedAt >= cutoff);
     await mkdir(this.directory, { recursive: true });
@@ -181,6 +213,10 @@ export class FileHostStore implements HostStore {
 
   private keyPath(workspaceId: string): string {
     return join(this.directory, `${workspaceId}.keys.jsonl`);
+  }
+
+  private removalPath(workspaceId: string): string {
+    return join(this.directory, `${workspaceId}.removed.jsonl`);
   }
 }
 

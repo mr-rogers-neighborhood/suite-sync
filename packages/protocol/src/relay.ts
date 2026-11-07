@@ -2,6 +2,7 @@ import { z } from "zod";
 import { frameRejectionSchema, frameSchema, sealedFrameSchema } from "./frame.js";
 import { deviceIdSchema, workspaceIdSchema } from "./ids.js";
 import { inviteRecordSchema, inviteRejectionSchema } from "./invite.js";
+import { removalRecordSchema, removalRejectionSchema } from "./removal.js";
 import { roleRecordSchema, roleRejectionSchema } from "./roleRecord.js";
 import { memberRoleSchema } from "./roles.js";
 
@@ -12,7 +13,11 @@ import { memberRoleSchema } from "./roles.js";
  * client has not seen. Nothing in this protocol asks it to understand a document, and
  * nothing lets it answer a question about one.
  */
-export const RELAY_PROTOCOL_VERSION = 2;
+/**
+ * 3: a device may say something the host is asked to forget, and an owner may take a device
+ * out of a workspace.
+ */
+export const RELAY_PROTOCOL_VERSION = 3;
 
 /**
  * A client announces itself.
@@ -37,6 +42,14 @@ const joinSchema = z
      * asked to make about a device — let it in, remove it — is a decision about which one.
      */
     name: z.string().min(1).max(80),
+    /**
+     * The invitation this device is holding, when it is holding one.
+     *
+     * Normally the host learns this from the key package. It is here so a device that an owner
+     * has taken out can say "I have been asked back" at the door, rather than being told it is
+     * removed and having no way to explain itself.
+     */
+    inviteId: z.string().min(1).optional(),
   })
   .strict();
 
@@ -64,6 +77,36 @@ const keyPackageSchema = z
 /** A role record, so the host can refuse a viewer without reading anything. */
 const roleSchema = z.object({ type: z.literal("role"), record: roleRecordSchema }).strict();
 
+/**
+ * A message that is forwarded and forgotten.
+ *
+ * Presence is the only thing a person sends that nobody should keep: a cursor in the log would
+ * be a document that grows every time somebody moves. So this is verified and relayed, and it
+ * is never numbered, appended or written down. The host still checks who sent it — a stranger
+ * may not use the host as a megaphone — but the check is membership, not permission to write.
+ *
+ * It is deliberately not a frame. A frame carries the group's application ciphertext, which
+ * ratchets per message: one dropped cursor would leave a gap in the secret tree that the next
+ * *document* update had to work around. Presence is encrypted with a key derived from the
+ * group instead (see `ephemeralKey`), so it can be late, out of order, or absent without ever
+ * costing the thing it is merely describing.
+ */
+const ephemeralSchema = z
+  .object({
+    type: z.literal("ephemeral"),
+    workspaceId: workspaceIdSchema,
+    deviceId: deviceIdSchema,
+    /** Base64 of this device's sealed presence bytes. */
+    payload: z.string().min(1),
+    signature: z.string().min(1),
+  })
+  .strict();
+
+/** An owner taking a device out. Public metadata, signed, kept beside the role records. */
+const removalSchema = z
+  .object({ type: z.literal("removal"), record: removalRecordSchema })
+  .strict();
+
 /** One sealed frame, on its way to the store and everybody else. */
 const sealedSchema = z.object({ type: z.literal("frame"), frame: sealedFrameSchema }).strict();
 
@@ -77,6 +120,8 @@ export const relayClientMessageSchema = z.discriminatedUnion("type", [
   inviteSchema,
   keyPackageSchema,
   roleSchema,
+  ephemeralSchema,
+  removalSchema,
   sealedSchema,
   sinceSchema,
 ]);
@@ -118,6 +163,25 @@ const joinedSchema = z
     members: z.array(memberSchema),
   })
   .strict();
+
+/** A forwarded presence message. Not numbered, because nothing keeps it. */
+const ephemeralOutSchema = z
+  .object({
+    type: z.literal("ephemeral"),
+    workspaceId: workspaceIdSchema,
+    deviceId: deviceIdSchema,
+    payload: z.string().min(1),
+    signature: z.string().min(1),
+  })
+  .strict();
+
+/**
+ * The one sentence a removed device is owed.
+ *
+ * Its socket is about to close, and "the host is not answering" is the wrong answer: the app
+ * would offer to retry something that can never work, and the person would keep trying.
+ */
+const removedSchema = z.object({ type: z.literal("removed") }).strict();
 
 /** A frame with its position, so a client can ask for what comes after it. */
 const frameOutSchema = z
@@ -169,8 +233,13 @@ const waitingSchema = z
 const refusedSchema = z
   .object({
     type: z.literal("refused"),
-    /** A frame the host would not store, or a role record it would not apply. */
-    reason: z.union([frameRejectionSchema, roleRejectionSchema, inviteRejectionSchema]),
+    /** A frame the host would not store, or a record it would not apply. */
+    reason: z.union([
+      frameRejectionSchema,
+      roleRejectionSchema,
+      inviteRejectionSchema,
+      removalRejectionSchema,
+    ]),
   })
   .strict();
 
@@ -208,6 +277,8 @@ export const relayHostMessageSchema = z.discriminatedUnion("type", [
   invitedSchema,
   waitingSchema,
   rosterSchema,
+  ephemeralOutSchema,
+  removedSchema,
   frameOutSchema,
   refusedSchema,
   errorSchema,
@@ -217,6 +288,25 @@ export type RelayHostMessage = z.infer<typeof relayHostMessageSchema>;
 export type RelayJoined = z.infer<typeof joinedSchema>;
 export type RelayApplied = z.infer<typeof appliedSchema>;
 export type RelayWaiting = z.infer<typeof waitingSchema>;
+export type RelayEphemeral = z.infer<typeof ephemeralOutSchema>;
+
+/** The part of a presence message that is signed, and the part that is not. */
+export type EphemeralBody = Omit<RelayEphemeral, "type" | "signature">;
+
+/** One presence message, as its sender writes it and its readers see it. */
+export type EphemeralMessage = EphemeralBody & { readonly signature: string };
+
+/**
+ * The bytes a device signs for a presence message.
+ *
+ * The host checks this before forwarding, because otherwise any socket could speak as any
+ * device and a workspace's "who is here" would be whatever a passer-by said it was.
+ */
+export function ephemeralPayload(message: EphemeralBody): Uint8Array {
+  return new TextEncoder().encode(
+    ["ephemeral", message.workspaceId, message.deviceId, message.payload].join("\n"),
+  );
+}
 export type RelayRoster = z.infer<typeof rosterSchema>;
 export type RelayMember = z.infer<typeof memberSchema>;
 export type RelayFrame = z.infer<typeof frameOutSchema>;

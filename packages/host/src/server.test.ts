@@ -7,11 +7,13 @@ import {
   createWorkspaceGroup,
   encodeBase64,
   encodeRelayMessage,
+  ephemeralPayload,
   framePayload,
   joinWorkspaceGroup,
   open,
   RELAY_PROTOCOL_VERSION,
   type RelayHostMessage,
+  removalRecordPayload,
   roleRecordPayload,
   type SealedFrame,
   seal,
@@ -127,6 +129,26 @@ function sealedFrame(
     payload,
   };
   return { ...header, signature: actor.sign(framePayload(header)) };
+}
+
+function removalRecord(actor: ReturnType<typeof device>, target: { deviceId: string }) {
+  const unsigned = {
+    workspaceId,
+    deviceId: target.deviceId,
+    removedAt: "2026-11-06T12:30:00.000Z",
+    signerId: actor.deviceId,
+  };
+  return { ...unsigned, signature: actor.sign(removalRecordPayload(unsigned)) };
+}
+
+/** A presence message: signed like any other, sealed with its own key, and stored like none. */
+function presenceMessage(actor: ReturnType<typeof device>, payload = "cHJlc2VuY2U=") {
+  const message = { workspaceId, deviceId: actor.deviceId, payload };
+  return {
+    type: "ephemeral" as const,
+    ...message,
+    signature: actor.sign(ephemeralPayload(message)),
+  };
 }
 
 async function joined(client: RelayClient, who: ReturnType<typeof device>) {
@@ -253,6 +275,168 @@ describe("two devices through one host", () => {
 
     alice.close();
     await server.close();
+  });
+});
+
+describe("a message the host is asked to forget", () => {
+  it("forwards presence to the room and keeps none of it", async () => {
+    const { server, store } = await started();
+    const alice = await RelayClient.connect(server.url);
+    const bob = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    await joined(bob, second);
+    bob.send({ type: "role", record: roleRecord(owner, second, "editor") });
+    await bob.until((m) => m.type === "applied");
+
+    alice.send(presenceMessage(owner));
+    const seen = await bob.until((m) => m.type === "ephemeral");
+    expect(seen.type === "ephemeral" && seen.payload).toBe("cHJlc2VuY2U=");
+
+    // The whole point: a cursor in the log would be a document that grows every time somebody
+    // moves, so the assertion is about absence.
+    expect(await store.loadFrames(workspaceId)).toHaveLength(0);
+
+    alice.close();
+    bob.close();
+    await server.close();
+  });
+
+  it("forwards a reader's presence while still refusing its frames", async () => {
+    const { server, store } = await started();
+    const alice = await RelayClient.connect(server.url);
+    const bob = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    alice.send({ type: "role", record: roleRecord(owner, second, "viewer") });
+    await joined(bob, second);
+
+    // A reader nobody could see would make collaboration mean collaboration between editors.
+    bob.send(presenceMessage(second));
+    await alice.until((m) => m.type === "ephemeral");
+
+    bob.send({ type: "frame", frame: sealedFrame(second, 1, "AAAA") });
+    expect(await bob.until((m) => m.type === "refused")).toEqual({
+      type: "refused",
+      reason: "not-authorized",
+    });
+    expect(await store.loadFrames(workspaceId)).toHaveLength(0);
+
+    alice.close();
+    bob.close();
+    await server.close();
+  });
+
+  it("refuses presence from a device with no role at all", async () => {
+    const { server } = await started();
+    const stranger = device();
+    const alice = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    await alice.until((m) => m.type === "applied");
+
+    const bob = await RelayClient.connect(server.url);
+    await joined(bob, stranger);
+    bob.send(presenceMessage(stranger));
+
+    expect(await bob.until((m) => m.type === "refused")).toEqual({
+      type: "refused",
+      reason: "not-authorized",
+    });
+
+    alice.close();
+    bob.close();
+    await server.close();
+  });
+});
+
+describe("taking a device out", () => {
+  it("tells the device, drops its socket, and stops counting it", async () => {
+    const { server } = await started();
+    const alice = await RelayClient.connect(server.url);
+    const bob = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    await alice.until((m) => m.type === "applied");
+    bob.send({
+      type: "join",
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      workspaceId,
+      deviceId: second.deviceId,
+      publicKey: second.publicKey,
+      name: "the desktop",
+    });
+    await bob.until((m) => m.type === "joined");
+    alice.send({ type: "role", record: roleRecord(owner, second, "editor") });
+    await bob.until((m) => m.type === "roster" && m.members.length === 2);
+
+    alice.send({ type: "removal", record: removalRecord(owner, second) });
+
+    // It is told which happened, because a bare close reads as a bad connection.
+    expect(await bob.until((m) => m.type === "removed")).toEqual({ type: "removed" });
+
+    alice.messages.length = 0;
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner", 1) });
+    const roster = await alice.until((m) => m.type === "roster");
+    expect(roster.type === "roster" && roster.members.map((member) => member.deviceId)).toEqual([
+      owner.deviceId,
+    ]);
+
+    alice.close();
+    await server.close();
+  });
+
+  it("refuses a removed device's frame, and its join, unless it holds a new invitation", async () => {
+    const { server } = await started();
+    const alice = await RelayClient.connect(server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    await alice.until((m) => m.type === "applied");
+    alice.send({ type: "removal", record: removalRecord(owner, second) });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    const returning = await RelayClient.connect(server.url);
+    returning.send({
+      type: "join",
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      workspaceId,
+      deviceId: second.deviceId,
+      publicKey: second.publicKey,
+      name: "the desktop",
+    });
+    expect(await returning.until((m) => m.type === "removed")).toEqual({ type: "removed" });
+
+    returning.close();
+    alice.close();
+    await server.close();
+  });
+
+  it("remembers a removal across a restart", async () => {
+    const store = new MemoryHostStore();
+    const first = await started(store);
+    const alice = await RelayClient.connect(first.server.url);
+    await joined(alice, owner);
+    alice.send({ type: "role", record: roleRecord(owner, owner, "owner") });
+    await alice.until((m) => m.type === "applied");
+    alice.send({ type: "removal", record: removalRecord(owner, second) });
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    alice.close();
+    await first.server.close();
+
+    const second_ = await started(store);
+    const back = await RelayClient.connect(second_.server.url);
+    back.send({
+      type: "join",
+      protocolVersion: RELAY_PROTOCOL_VERSION,
+      workspaceId,
+      deviceId: second.deviceId,
+      publicKey: second.publicKey,
+      name: "the desktop",
+    });
+    expect(await back.until((m) => m.type === "removed")).toEqual({ type: "removed" });
+
+    back.close();
+    await second_.server.close();
   });
 });
 

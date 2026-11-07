@@ -6,7 +6,11 @@ import { z } from "zod";
  * client has not seen. Nothing in this protocol asks it to understand a document, and
  * nothing lets it answer a question about one.
  */
-export declare const RELAY_PROTOCOL_VERSION = 2;
+/**
+ * 3: a device may say something the host is asked to forget, and an owner may take a device
+ * out of a workspace.
+ */
+export declare const RELAY_PROTOCOL_VERSION = 3;
 export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObject<{
     type: z.ZodLiteral<"join">;
     protocolVersion: z.ZodNumber;
@@ -14,6 +18,7 @@ export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObj
     deviceId: z.ZodString;
     publicKey: z.ZodString;
     name: z.ZodString;
+    inviteId: z.ZodOptional<z.ZodString>;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"invite">;
     record: z.ZodObject<{
@@ -58,6 +63,21 @@ export declare const relayClientMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObj
             viewer: "viewer";
         }>;
         seq: z.ZodNumber;
+        signerId: z.ZodString;
+        signature: z.ZodString;
+    }, z.core.$strict>;
+}, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"ephemeral">;
+    workspaceId: z.ZodString;
+    deviceId: z.ZodString;
+    payload: z.ZodString;
+    signature: z.ZodString;
+}, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"removal">;
+    record: z.ZodObject<{
+        workspaceId: z.ZodString;
+        deviceId: z.ZodString;
+        removedAt: z.ZodString;
         signerId: z.ZodString;
         signature: z.ZodString;
     }, z.core.$strict>;
@@ -113,6 +133,14 @@ declare const joinedSchema: z.ZodObject<{
             viewer: "viewer";
         }>;
     }, z.core.$strict>>;
+}, z.core.$strict>;
+/** A forwarded presence message. Not numbered, because nothing keeps it. */
+declare const ephemeralOutSchema: z.ZodObject<{
+    type: z.ZodLiteral<"ephemeral">;
+    workspaceId: z.ZodString;
+    deviceId: z.ZodString;
+    payload: z.ZodString;
+    signature: z.ZodString;
 }, z.core.$strict>;
 /** A frame with its position, so a client can ask for what comes after it. */
 declare const frameOutSchema: z.ZodObject<{
@@ -243,6 +271,14 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
         }>;
     }, z.core.$strict>>;
 }, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"ephemeral">;
+    workspaceId: z.ZodString;
+    deviceId: z.ZodString;
+    payload: z.ZodString;
+    signature: z.ZodString;
+}, z.core.$strict>, z.ZodObject<{
+    type: z.ZodLiteral<"removed">;
+}, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"frame">;
     index: z.ZodNumber;
     frame: z.ZodObject<{
@@ -266,6 +302,7 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
         "stale-epoch": "stale-epoch";
         "not-authorized": "not-authorized";
         "invalid-signature": "invalid-signature";
+        removed: "removed";
     }>, z.ZodEnum<{
         "wrong-workspace": "wrong-workspace";
         "invalid-signature": "invalid-signature";
@@ -280,6 +317,11 @@ export declare const relayHostMessageSchema: z.ZodDiscriminatedUnion<[z.ZodObjec
         expired: "expired";
         "unknown-invite": "unknown-invite";
         "invite-spent": "invite-spent";
+    }>, z.ZodEnum<{
+        "wrong-workspace": "wrong-workspace";
+        "invalid-signature": "invalid-signature";
+        "not-owner": "not-owner";
+        self: "self";
     }>]>;
 }, z.core.$strict>, z.ZodObject<{
     type: z.ZodLiteral<"error">;
@@ -295,6 +337,20 @@ export type RelayHostMessage = z.infer<typeof relayHostMessageSchema>;
 export type RelayJoined = z.infer<typeof joinedSchema>;
 export type RelayApplied = z.infer<typeof appliedSchema>;
 export type RelayWaiting = z.infer<typeof waitingSchema>;
+export type RelayEphemeral = z.infer<typeof ephemeralOutSchema>;
+/** The part of a presence message that is signed, and the part that is not. */
+export type EphemeralBody = Omit<RelayEphemeral, "type" | "signature">;
+/** One presence message, as its sender writes it and its readers see it. */
+export type EphemeralMessage = EphemeralBody & {
+    readonly signature: string;
+};
+/**
+ * The bytes a device signs for a presence message.
+ *
+ * The host checks this before forwarding, because otherwise any socket could speak as any
+ * device and a workspace's "who is here" would be whatever a passer-by said it was.
+ */
+export declare function ephemeralPayload(message: EphemeralBody): Uint8Array;
 export type RelayRoster = z.infer<typeof rosterSchema>;
 export type RelayMember = z.infer<typeof memberSchema>;
 export type RelayFrame = z.infer<typeof frameOutSchema>;

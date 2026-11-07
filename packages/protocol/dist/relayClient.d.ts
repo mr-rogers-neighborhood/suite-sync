@@ -1,6 +1,7 @@
 import { type SealedFrame } from "./frame.js";
 import type { InviteRecord } from "./invite.js";
-import { type RelayFrame, type RelayJoined, type RelayRoster, type RelayWaiting } from "./relay.js";
+import { type EphemeralMessage, type RelayFrame, type RelayJoined, type RelayRoster, type RelayWaiting } from "./relay.js";
+import type { RemovalRecord } from "./removal.js";
 import type { RoleRecord } from "./roleRecord.js";
 /**
  * The client half of the relay, and nothing else.
@@ -30,6 +31,8 @@ export interface RelayClientOptions {
     readonly name: string;
     /** Signs the header of every frame this client sends. */
     readonly sign: (payload: Uint8Array) => string;
+    /** The invitation this device holds, when it is arriving with one. */
+    readonly inviteId?: string;
     readonly webSocket?: RelayWebSocketFactory;
 }
 export interface RelayClientHandlers {
@@ -39,6 +42,10 @@ export interface RelayClientHandlers {
     readonly onWaiting: (waiting: RelayWaiting) => void;
     /** The list of who is here and what each of them may do, whenever it changes. */
     readonly onRoster: (roster: RelayRoster) => void;
+    /** Somebody's presence. Live only: nothing on either side keeps it. */
+    readonly onEphemeral: (message: EphemeralMessage) => void;
+    /** An owner has taken this device out of the workspace. */
+    readonly onRemoved: () => void;
     readonly onRefused: (reason: string) => void;
     readonly onError: (code: string, message: string) => void;
     readonly onClosed: () => void;
@@ -56,6 +63,10 @@ export interface RelayClient {
         name: string;
         frame: SealedFrame;
     }): void;
+    /** Send something the host is asked to forget: presence, today, and nothing else. */
+    sendEphemeral(message: EphemeralMessage): void;
+    /** Take a device out of the workspace. Only an owner's record is applied. */
+    sendRemoval(record: RemovalRecord): void;
     /** Ask for everything after `after`. 0 means everything the host holds. */
     since(after: number): void;
     setRole(record: RoleRecord): void;

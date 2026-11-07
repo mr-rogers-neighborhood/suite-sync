@@ -1,4 +1,4 @@
-import { type Frame, type InviteRecord, type MemberRole, type RoleRecord } from "@suite/sync";
+import { type Frame, type InviteRecord, type MemberRole, type RemovalRecord, type RoleRecord } from "@suite/sync";
 /**
  * What a host keeps between process lifetimes: frames, and who may write.
  *
@@ -20,6 +20,14 @@ export interface HostStore {
     /** The public key a device joined with, so its signature can be checked after a restart. */
     loadKeys(workspaceId: string): Promise<readonly PinnedKey[]>;
     appendKey(workspaceId: string, key: PinnedKey): Promise<void>;
+    /**
+     * Devices an owner has taken out.
+     *
+     * Kept for the same reason role records are: a host that forgot would keep forwarding a
+     * removed device's mail, and would accept it back after a restart as if nothing happened.
+     */
+    loadRemovals(workspaceId: string): Promise<readonly RemovalRecord[]>;
+    appendRemoval(workspaceId: string, record: RemovalRecord): Promise<void>;
     /** Forget frames that arrived before `cutoff`. A rewrite, so it runs when a window closes. */
     compact(workspaceId: string, cutoff: string): Promise<void>;
 }
@@ -46,6 +54,7 @@ export declare class MemoryHostStore implements HostStore {
     private readonly invites;
     private readonly roles;
     private readonly keys;
+    private readonly removals;
     loadFrames(workspaceId: string): Promise<readonly Frame[]>;
     appendFrame(workspaceId: string, frame: Frame): Promise<void>;
     loadRoles(workspaceId: string): Promise<readonly RoleRecord[]>;
@@ -54,6 +63,8 @@ export declare class MemoryHostStore implements HostStore {
     appendInvite(workspaceId: string, record: InviteRecord): Promise<void>;
     loadKeys(workspaceId: string): Promise<readonly PinnedKey[]>;
     appendKey(workspaceId: string, key: PinnedKey): Promise<void>;
+    loadRemovals(workspaceId: string): Promise<readonly RemovalRecord[]>;
+    appendRemoval(workspaceId: string, record: RemovalRecord): Promise<void>;
     compact(workspaceId: string, cutoff: string): Promise<void>;
 }
 /**
@@ -74,11 +85,14 @@ export declare class FileHostStore implements HostStore {
     appendInvite(workspaceId: string, record: InviteRecord): Promise<void>;
     loadKeys(workspaceId: string): Promise<readonly PinnedKey[]>;
     appendKey(workspaceId: string, key: PinnedKey): Promise<void>;
+    loadRemovals(workspaceId: string): Promise<readonly RemovalRecord[]>;
+    appendRemoval(workspaceId: string, record: RemovalRecord): Promise<void>;
     compact(workspaceId: string, cutoff: string): Promise<void>;
     private appendLine;
     private framePath;
     private rolePath;
     private invitePath;
     private keyPath;
+    private removalPath;
 }
 //# sourceMappingURL=store.d.ts.map

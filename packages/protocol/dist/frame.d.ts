@@ -70,14 +70,17 @@ export declare function framePayload(header: FrameHeader): Uint8Array;
 /**
  * Why a frame was refused.
  *
- * The first two are the receiving client's reasons; the last two are the host's. They
- * travel on the wire, so they are one vocabulary rather than two.
+ * The first two are the receiving client's reasons; the rest are the host's. They travel on
+ * the wire, so they are one vocabulary rather than two. `removed` is the one a device is told
+ * when an owner has taken it out: distinct from `not-authorized`, because it is a decision
+ * somebody made rather than a permission that was never granted.
  */
 export declare const frameRejectionSchema: z.ZodEnum<{
     "wrong-workspace": "wrong-workspace";
     "stale-epoch": "stale-epoch";
     "not-authorized": "not-authorized";
     "invalid-signature": "invalid-signature";
+    removed: "removed";
 }>;
 export type FrameRejection = z.infer<typeof frameRejectionSchema>;
 /**

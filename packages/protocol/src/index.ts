@@ -75,13 +75,17 @@ export {
   parseInvite,
 } from "./inviteLink.js";
 export {
+  type EphemeralBody,
+  type EphemeralMessage,
   encodeRelayMessage,
+  ephemeralPayload,
   isRelayCompatible,
   parseClientMessage,
   parseHostMessage,
   RELAY_PROTOCOL_VERSION,
   type RelayApplied,
   type RelayClientMessage,
+  type RelayEphemeral,
   type RelayErrorCode,
   type RelayFrame,
   type RelayHostMessage,
@@ -103,6 +107,20 @@ export {
   signFrame,
 } from "./relayClient.js";
 export {
+  applyRemovalRecord,
+  createRemovalState,
+  isRemoved,
+  type RemovalRecord,
+  type RemovalRejection,
+  type RemovalResult,
+  type RemovalState,
+  type RemovalVerifier,
+  reinstateDevice,
+  removalRecordPayload,
+  removalRecordSchema,
+  removalRejectionSchema,
+} from "./removal.js";
+export {
   applyRoleRecord,
   applyRoleRecords,
   createRoleState,
@@ -121,6 +139,7 @@ export {
 export {
   canInvite,
   canWrite,
+  hasRole,
   type MemberRole,
   memberRoleSchema,
   roleRank,

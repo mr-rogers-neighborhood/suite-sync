@@ -1,11 +1,12 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { frameSchema, inviteRecordSchema, memberRoleSchema, roleRecordSchema, } from "@suite/sync";
+import { frameSchema, inviteRecordSchema, memberRoleSchema, removalRecordSchema, roleRecordSchema, } from "@suite/sync";
 export class MemoryHostStore {
     frames = new Map();
     invites = new Map();
     roles = new Map();
     keys = new Map();
+    removals = new Map();
     async loadFrames(workspaceId) {
         return [...(this.frames.get(workspaceId) ?? [])];
     }
@@ -37,6 +38,14 @@ export class MemoryHostStore {
         const existing = this.keys.get(workspaceId) ?? [];
         existing.push(key);
         this.keys.set(workspaceId, existing);
+    }
+    async loadRemovals(workspaceId) {
+        return [...(this.removals.get(workspaceId) ?? [])];
+    }
+    async appendRemoval(workspaceId, record) {
+        const existing = this.removals.get(workspaceId) ?? [];
+        existing.push(record);
+        this.removals.set(workspaceId, existing);
     }
     async compact(workspaceId, cutoff) {
         const kept = (this.frames.get(workspaceId) ?? []).filter((f) => f.receivedAt >= cutoff);
@@ -79,6 +88,15 @@ export class FileHostStore {
     async appendKey(workspaceId, key) {
         await this.appendLine(this.keyPath(workspaceId), key);
     }
+    async loadRemovals(workspaceId) {
+        return readLines(this.removalPath(workspaceId), (value) => {
+            const parsed = removalRecordSchema.safeParse(value);
+            return parsed.success ? parsed.data : undefined;
+        });
+    }
+    async appendRemoval(workspaceId, record) {
+        await this.appendLine(this.removalPath(workspaceId), record);
+    }
     async compact(workspaceId, cutoff) {
         const kept = (await this.loadFrames(workspaceId)).filter((f) => f.receivedAt >= cutoff);
         await mkdir(this.directory, { recursive: true });
@@ -102,6 +120,9 @@ export class FileHostStore {
     }
     keyPath(workspaceId) {
         return join(this.directory, `${workspaceId}.keys.jsonl`);
+    }
+    removalPath(workspaceId) {
+        return join(this.directory, `${workspaceId}.removed.jsonl`);
     }
 }
 async function readLines(path, parse) {

@@ -25,10 +25,19 @@ export function createRelayClient(options, handlers) {
                 deviceId: options.deviceId,
                 publicKey: options.publicKey,
                 name: options.name,
+                ...(options.inviteId === undefined ? {} : { inviteId: options.inviteId }),
             });
             resolve({
                 send: (frame) => send({ type: "frame", frame }),
                 sendInvite: (record) => send({ type: "invite", record }),
+                sendEphemeral: (message) => send({
+                    type: "ephemeral",
+                    workspaceId: message.workspaceId,
+                    deviceId: message.deviceId,
+                    payload: message.payload,
+                    signature: message.signature,
+                }),
+                sendRemoval: (record) => send({ type: "removal", record }),
                 sendKeyPackage: (message) => send({
                     type: "keypackage",
                     inviteId: message.inviteId,
@@ -56,6 +65,12 @@ function dispatch(message, handlers) {
             return;
         case "roster":
             handlers.onRoster(message);
+            return;
+        case "ephemeral":
+            handlers.onEphemeral(message);
+            return;
+        case "removed":
+            handlers.onRemoved();
             return;
         case "frame":
             handlers.onFrame(message.index, message.frame);

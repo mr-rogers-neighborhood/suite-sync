@@ -15,6 +15,17 @@ export function canWrite(role: MemberRole): boolean {
   return role !== "viewer";
 }
 
+/**
+ * Whether a device is in this workspace at all, whatever it may do.
+ *
+ * The distinction matters for exactly one message: presence. A reader that nobody can see
+ * would make "collaboration" mean "collaboration between editors", so a viewer's cursor is
+ * forwarded while its frames are still refused.
+ */
+export function hasRole(role: MemberRole | null | undefined): boolean {
+  return role !== null && role !== undefined;
+}
+
 export function canInvite(role: MemberRole): boolean {
   return role === "owner";
 }
