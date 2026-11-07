@@ -1,4 +1,4 @@
-import { createApplicationMessage, createCommit, createGroup, decodeGroupState, decodeMlsMessage, defaultAuthenticationService, defaultCapabilities, defaultKeyPackageEqualityConfig, defaultKeyRetentionConfig, defaultLifetime, defaultLifetimeConfig, defaultPaddingConfig, encodeGroupState, encodeMlsMessage, generateKeyPackage, getCiphersuiteFromName, getCiphersuiteImpl, joinGroup, makePskIndex, mlsExporter, nobleCryptoProvider, processPrivateMessage, processPublicMessage, } from "ts-mls";
+import { acceptAll, createApplicationMessage, createCommit, createGroup, decodeGroupState, decodeMlsMessage, defaultAuthenticationService, defaultCapabilities, defaultKeyPackageEqualityConfig, defaultKeyRetentionConfig, defaultLifetime, defaultLifetimeConfig, defaultPaddingConfig, encodeGroupState, encodeMlsMessage, generateKeyPackage, getCiphersuiteFromName, getCiphersuiteImpl, joinGroup, makePskIndex, mlsExporter, nobleCryptoProvider, processPrivateMessage, processPublicMessage, } from "ts-mls";
 /**
  * The MLS group a device belongs to, and the things a device does with it.
  *
@@ -123,12 +123,15 @@ export async function applyCommit(group, commit) {
     const message = decoded[0];
     // A commit is a public message or a private one, depending on how it was created; the
     // library decides, and both arrive here looking like a commit to everyone else.
+    // `acceptAll` is not a shrug: this device is not the group's policy engine. The commit it is
+    // looking at was authored by a member, and whether that member may change the group is decided
+    // by the *role records* the host enforces — not by a prompt in an app that has no way to ask.
     if (message.wireformat === "mls_public_message") {
-        const result = await processPublicMessage(group.state, message.publicMessage, makePskIndex(group.state, {}), cs);
+        const result = await processPublicMessage(group.state, message.publicMessage, makePskIndex(group.state, {}), cs, acceptAll);
         return { group: groupOf(result.newState) };
     }
     if (message.wireformat === "mls_private_message") {
-        const result = await processPrivateMessage(group.state, message.privateMessage, makePskIndex(group.state, {}), cs);
+        const result = await processPrivateMessage(group.state, message.privateMessage, makePskIndex(group.state, {}), cs, acceptAll);
         return { group: groupOf(result.newState) };
     }
     throw new Error("that is not a commit");

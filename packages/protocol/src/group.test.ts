@@ -187,3 +187,51 @@ describe("a commit somebody else wrote", () => {
     await expect(applyCommit(group, new TextEncoder().encode("nonsense"))).rejects.toThrow();
   });
 });
+
+describe("a commit that removes somebody", () => {
+  it("moves every remaining member to the new epoch", async () => {
+    const workspace = "d".repeat(64);
+    const owner = await createDeviceIdentity("a".repeat(64));
+    const guest = await createDeviceIdentity("b".repeat(64));
+    const third = await createDeviceIdentity("c".repeat(64));
+
+    const started = await createWorkspaceGroup(workspace, owner);
+    const addedGuest = await addDevice(started, guest.keyPackage);
+    await joinWorkspaceGroup(addedGuest.welcome, guest);
+    const addedThird = await addDevice(addedGuest.group, third.keyPackage);
+    const thirdJoined = await joinWorkspaceGroup(addedThird.welcome, third);
+
+    // From the owner's side: the owner takes the guest out, and the third device — neither the
+    // committer nor the subject — has to follow, or it is stuck at the epoch before it for ever.
+    const leaf = leafIndexOf(addedThird.group, "b".repeat(64));
+    expect(leaf).not.toBeNull();
+    const removed = await removeDevice(addedThird.group, leaf as number);
+
+    const applied = await applyCommit(thirdJoined, removed.commit);
+    expect(applied.group.epoch).toBe(removed.group.epoch);
+
+    const sealed = await seal(removed.group, new TextEncoder().encode("after the removal"));
+    const opened = await open(applied.group, sealed.message);
+    expect(new TextDecoder().decode(opened.plaintext ?? new Uint8Array())).toBe(
+      "after the removal",
+    );
+  });
+
+  it("leaves a removed device unable to read the epoch that excludes it", async () => {
+    const workspace = "e".repeat(64);
+    const owner = await createDeviceIdentity("a".repeat(64));
+    const guest = await createDeviceIdentity("b".repeat(64));
+
+    const started = await createWorkspaceGroup(workspace, owner);
+    const added = await addDevice(started, guest.keyPackage);
+    const guestGroup = await joinWorkspaceGroup(added.welcome, guest);
+    const leaf = leafIndexOf(added.group, "b".repeat(64)) as number;
+    const removed = await removeDevice(added.group, leaf);
+
+    const applied = await applyCommit(guestGroup, removed.commit).catch(() => null);
+    if (applied !== null) {
+      const sealed = await seal(removed.group, new TextEncoder().encode("not for you"));
+      await expect(open(applied.group, sealed.message)).rejects.toThrow();
+    }
+  });
+});

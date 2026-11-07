@@ -1,4 +1,5 @@
 import {
+  acceptAll,
   type CiphersuiteImpl,
   type ClientConfig,
   type ClientState,
@@ -231,12 +232,16 @@ export async function applyCommit(group: DeviceGroup, commit: Uint8Array): Promi
   const message = decoded[0];
   // A commit is a public message or a private one, depending on how it was created; the
   // library decides, and both arrive here looking like a commit to everyone else.
+  // `acceptAll` is not a shrug: this device is not the group's policy engine. The commit it is
+  // looking at was authored by a member, and whether that member may change the group is decided
+  // by the *role records* the host enforces — not by a prompt in an app that has no way to ask.
   if (message.wireformat === "mls_public_message") {
     const result = await processPublicMessage(
       group.state,
       message.publicMessage,
       makePskIndex(group.state, {}),
       cs,
+      acceptAll,
     );
     return { group: groupOf(result.newState) };
   }
@@ -246,6 +251,7 @@ export async function applyCommit(group: DeviceGroup, commit: Uint8Array): Promi
       message.privateMessage,
       makePskIndex(group.state, {}),
       cs,
+      acceptAll,
     );
     return { group: groupOf(result.newState) };
   }
