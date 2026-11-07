@@ -96,7 +96,7 @@ Presence is not in the durable message set. It travels as an `ephemeral` message
 cursor in the log would be a document that grows every time somebody moves.
 
 It is deliberately not a frame. A frame carries the group's application ciphertext, which ratchets per
-message, so one dropped cursor would leave a gap in the secret tree that the next *document* update
+message, so one dropped cursor would leave a gap in the secret tree that the next _document_ update
 would have to work around. Presence is sealed with a key derived from the group instead
 (`exportKey(group, "suite/presence", workspaceId)`), so it can be late, out of order or absent and cost
 nothing. A device in another epoch simply cannot open it, which is the right answer for something that
