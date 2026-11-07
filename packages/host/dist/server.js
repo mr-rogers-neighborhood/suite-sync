@@ -424,11 +424,14 @@ export async function createSyncServer(options) {
         }
         context.room.removals = applied.state;
         await store.appendRemoval(context.room.workspaceId, record);
-        for (const peer of context.room.sockets) {
+        for (const peer of [...context.room.sockets]) {
             const peerId = contexts.get(peer)?.deviceId;
             if (peerId === record.deviceId) {
                 send(peer, { type: "removed" });
-                peer.close();
+                // The next tick, so the sentence is on the wire before the socket goes. Closing
+                // immediately races the message it was meant to carry, and the app would report a bad
+                // connection instead of the decision somebody made.
+                setTimeout(() => peer.close(), 25);
             }
         }
         for (const peer of [...context.room.sockets]) {
