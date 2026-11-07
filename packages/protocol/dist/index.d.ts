@@ -1,7 +1,7 @@
 export { decodeBase64, encodeBase64 } from "./base64.js";
 export { canonicalJson } from "./canonical.js";
 export { type Frame, type FrameHeader, type FrameKind, type FrameRejection, frameHeaderSchema, frameKindSchema, framePayload, frameRejection, frameRejectionSchema, frameSchema, hostAcceptsEpoch, type SealedFrame, sealedFrameSchema, } from "./frame.js";
-export { type AddDeviceResult, addDevice, createDeviceIdentity, createWorkspaceGroup, type DeviceGroup, type DeviceIdentity, decodeGroup, decodeKeyPackageBytes, encodeGroup, encodeKeyPackageBytes, exportKey, joinWorkspaceGroup, leafIndexOf, type OpenedMessage, open, type RemoveDeviceResult, removeDevice, type SealedMessage, SUITE_CIPHERSUITE, seal, } from "./group.js";
+export { type AddDeviceResult, type AppliedCommit, addDevice, applyCommit, createDeviceIdentity, createWorkspaceGroup, type DeviceGroup, type DeviceIdentity, decodeGroup, decodeKeyPackageBytes, encodeGroup, encodeKeyPackageBytes, exportKey, joinWorkspaceGroup, leafIndexOf, type OpenedMessage, open, type RemoveDeviceResult, removeDevice, type SealedMessage, SUITE_CIPHERSUITE, seal, } from "./group.js";
 export { type DeviceId, deviceIdSchema, type InviteId, inviteIdSchema, isDeviceId, isInviteId, isMemberId, isWorkspaceId, type MemberId, memberIdSchema, type WorkspaceId, workspaceIdSchema, } from "./ids.js";
 export { addInvite, createInviteState, type InviteRecord, type InviteRejection, type InviteResult, type InviteState, type InviteVerifier, invitedRole, inviteRecordPayload, inviteRecordSchema, inviteRejectionSchema, liveInvite, spendInvite, } from "./invite.js";
 export { formatInvite, INVITE_SCHEME, type InviteDetails, type InviteParse, JOIN_HOST, parseInvite, } from "./inviteLink.js";

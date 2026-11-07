@@ -17,7 +17,9 @@ export {
 } from "./frame.js";
 export {
   type AddDeviceResult,
+  type AppliedCommit,
   addDevice,
+  applyCommit,
   createDeviceIdentity,
   createWorkspaceGroup,
   type DeviceGroup,

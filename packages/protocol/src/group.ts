@@ -26,6 +26,7 @@ import {
   nobleCryptoProvider,
   type PrivateKeyPackage,
   processPrivateMessage,
+  processPublicMessage,
   type Welcome,
 } from "ts-mls";
 
@@ -209,6 +210,46 @@ export async function removeDevice(
     { extraProposals: [{ proposalType: "remove", remove: { removed: leafIndex } }] },
   );
   return { group: groupOf(result.newState), commit: encodeMlsMessage(result.commit) };
+}
+
+export interface AppliedCommit {
+  readonly group: DeviceGroup;
+}
+
+/**
+ * Apply a commit somebody else wrote.
+ *
+ * This is what keeps a member in step when the membership changes: an Add or a Remove moves
+ * the group to a new epoch, and every other device has to move with it or it spends the rest
+ * of the workspace unable to read anything. A device applies its *own* commits by creating
+ * them, so this is only ever for somebody else's.
+ */
+export async function applyCommit(group: DeviceGroup, commit: Uint8Array): Promise<AppliedCommit> {
+  const cs = await cipherSuite();
+  const decoded = decodeMlsMessage(commit, 0);
+  if (decoded === undefined) throw new Error("that is not a commit");
+  const message = decoded[0];
+  // A commit is a public message or a private one, depending on how it was created; the
+  // library decides, and both arrive here looking like a commit to everyone else.
+  if (message.wireformat === "mls_public_message") {
+    const result = await processPublicMessage(
+      group.state,
+      message.publicMessage,
+      makePskIndex(group.state, {}),
+      cs,
+    );
+    return { group: groupOf(result.newState) };
+  }
+  if (message.wireformat === "mls_private_message") {
+    const result = await processPrivateMessage(
+      group.state,
+      message.privateMessage,
+      makePskIndex(group.state, {}),
+      cs,
+    );
+    return { group: groupOf(result.newState) };
+  }
+  throw new Error("that is not a commit");
 }
 
 export interface SealedMessage {

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { frameRejection, hostAcceptsEpoch } from "./frame.js";
 import {
   addDevice,
+  applyCommit,
   createDeviceIdentity,
   createWorkspaceGroup,
   decodeGroup,
@@ -152,5 +153,37 @@ describe("the frame rules the library does not enforce", () => {
     // Ownership and authorship are decided from this, not from the host's ordering.
     expect(frameRejection({ workspaceId, epoch: 1 }, { workspaceId, epoch: 1 })).toBeNull();
     expect(ownerDevice).not.toBe(secondDevice);
+  });
+});
+
+describe("a commit somebody else wrote", () => {
+  it("moves a member to the new epoch, so what follows is readable again", async () => {
+    const workspaceId = "e".repeat(64);
+    const owner = await createDeviceIdentity("a".repeat(64));
+    const guest = await createDeviceIdentity("b".repeat(64));
+    const third = await createDeviceIdentity("c".repeat(64));
+
+    const started = await createWorkspaceGroup(workspaceId, owner);
+    const guestIn = await joinWorkspaceGroup(
+      (await addDevice(started, guest.keyPackage)).welcome,
+      guest,
+    );
+    const guestGroup = guestIn;
+
+    // The owner adds a third device; the guest has to follow or it is stuck for ever.
+    const added = await addDevice(guestIn, third.keyPackage);
+    const applied = await applyCommit(guestGroup, added.commit);
+    expect(applied.group.epoch).toBe(added.group.epoch);
+
+    const sealed = await seal(added.group, new TextEncoder().encode("after the change"));
+    const opened = await open(applied.group, sealed.message);
+    expect(new TextDecoder().decode(opened.plaintext ?? new Uint8Array())).toBe("after the change");
+  });
+
+  it("refuses something that is not a commit", async () => {
+    const workspaceId = "f".repeat(64);
+    const owner = await createDeviceIdentity("a".repeat(64));
+    const group = await createWorkspaceGroup(workspaceId, owner);
+    await expect(applyCommit(group, new TextEncoder().encode("nonsense"))).rejects.toThrow();
   });
 });

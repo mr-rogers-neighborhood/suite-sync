@@ -66,6 +66,18 @@ export declare function leafIndexOf(group: DeviceGroup, name: string): number | 
  * commit is not something it can read, whatever the host does.
  */
 export declare function removeDevice(group: DeviceGroup, leafIndex: number): Promise<RemoveDeviceResult>;
+export interface AppliedCommit {
+    readonly group: DeviceGroup;
+}
+/**
+ * Apply a commit somebody else wrote.
+ *
+ * This is what keeps a member in step when the membership changes: an Add or a Remove moves
+ * the group to a new epoch, and every other device has to move with it or it spends the rest
+ * of the workspace unable to read anything. A device applies its *own* commits by creating
+ * them, so this is only ever for somebody else's.
+ */
+export declare function applyCommit(group: DeviceGroup, commit: Uint8Array): Promise<AppliedCommit>;
 export interface SealedMessage {
     readonly group: DeviceGroup;
     readonly message: Uint8Array;
